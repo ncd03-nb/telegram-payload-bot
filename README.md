@@ -7,7 +7,7 @@ Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên tron
 1. Mở bot và gửi `/start`.
 2. Gửi link ROM, hoặc `/list <link>`. Bot trả mã ROM và danh sách phân vùng/dung lượng.
 3. Gửi `/extract <mã ROM> boot,init_boot,vbmeta`, hoặc `/extract <link> boot`.
-4. Tin nhắn tiến độ được chỉnh sửa khoảng 15 giây/lần khi runner bắt đầu. Kết quả có tên ảnh, dung lượng và một nút tải Google Drive cho mỗi phân vùng.
+4. Tin nhắn tiến độ được chỉnh sửa khoảng 15 giây/lần khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi gửi **một tin nhắn có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có tên file và dung lượng.
 
 `/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ. Chỉ Telegram user trong `ALLOWED_USER_IDS` được dùng, chỉ chat riêng.
 
@@ -34,7 +34,7 @@ Google OAuth của ứng dụng External ở trạng thái Testing có thể h�
 - HTTP(S) công khai, server hỗ trợ `Range`/HTTP 206. Từ chối IP nội bộ, cổng tùy chỉnh, URL chứa credentials; kiểm tra DNS cho cả redirect.
 - ZIP/ZIP64, `payload.bin` đặt ở thư mục gốc với phương thức `ZIP_STORED`. ZIP nén payload ở lớp ZIP hoặc mã hóa sẽ báo lỗi, không tải cả ROM để thử.
 - Payload v2, full OTA: `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, `ZERO`, `DISCARD`. Mỗi operation giới hạn 32 MiB nén/64 MiB giải nén. Kiểm tra SHA-256 operation nếu có và bắt buộc SHA-256 ảnh cuối. Có thể liệt kê delta OTA nhưng không xuất operation cần ảnh cũ.
-- Đọc metadata khoảng vài trăm KiB; chỉ tải các operation của phân vùng được chọn. Không cần tải toàn bộ ROM 10–12 GB. Ảnh được ghi một phân vùng/lần trên runner, upload resumable 8 MiB/chunk; kiểm tra dung lượng và MD5 trên Drive rồi xóa bản local.
+- Đọc metadata khoảng vài trăm KiB; chỉ tải các operation của phân vùng được chọn. Không cần tải toàn bộ ROM 10–12 GB. Ảnh được ghi một phân vùng/lần trên runner, kiểm tra SHA-256 rồi thêm vào ZIP64 (DEFLATE level 1) và xóa ảnh trung gian. Chỉ ZIP cuối được upload resumable 8 MiB/chunk; kiểm tra dung lượng và MD5 trên Drive rồi xóa bản local. Với một phân vùng, upload `.img` trực tiếp. ZIP lớn vẫn cần chỗ trống trên runner; nếu không đủ cho ZIP và ảnh đang nén, bot báo chọn ít phân vùng hơn. Giới hạn 40 GiB là tổng ảnh, không đảm bảo mọi ROM đủ chỗ để xuất `all`.
 - OPlus `downloadCheck` được xử lý bằng header của updater (`User-Agent: okhttp/3.12.12`, `userId: oplus-ota|16002018`), theo cách trong repo ROM hiện có. Chỉ gửi các header này đến host OTA OPlus được hỗ trợ, không gửi credential Google/GitHub tới CDN.
 - Kiểm tra hash không xác nhận chữ ký nhà sản xuất; bot xuất ảnh để tải về, không tự flash thiết bị.
 

@@ -18,6 +18,7 @@ from .telegram import Telegram
 
 HELP = '''🤖 Payload → IMG → Google Drive
 Gửi link ZIP OTA/payload.bin hoặc /list <link> để xem phân vùng.
+Nhiều phân vùng → 1 ZIP, 1 nút tải. Một phân vùng → .img.
 /extract <mã ROM hoặc link> boot,init_boot,vbmeta
 /extract <mã ROM> all — xuất mọi phân vùng (tối đa 40 GiB)
 /status [mã tác vụ]

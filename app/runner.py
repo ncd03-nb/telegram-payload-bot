@@ -4,6 +4,7 @@ import os
 import re
 import signal
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 from .gdrive import Drive
@@ -12,6 +13,7 @@ from .remote import Remote
 from .security import SourceError
 from .settings import Settings
 from .telegram import Telegram
+from .bundle import Bundle
 
 
 def selection(text, parts):
@@ -24,8 +26,10 @@ def selection(text, parts):
 
 
 async def send_file(telegram, chat, file):
-    await telegram.send(chat, f"✅ Hoàn thành\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB",
-        reply_markup={'inline_keyboard': [[{'text': '⬇ Tải .img từ Drive', 'url': file['url']}]]})
+    is_zip = file['name'].endswith('.zip')
+    detail = f"\n📦 {len(file['members'])} phân vùng" if file.get('members') else ''
+    await telegram.send(chat, f"✅ Hoàn thành\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB" + detail,
+        reply_markup={'inline_keyboard': [[{'text': '⬇ Tải ZIP từ Drive' if is_zip else '⬇ Tải .img từ Drive', 'url': file['url']}]]})
 
 
 class Progress:
@@ -68,18 +72,30 @@ async def run():
                 if total > s.max_output:
                     raise SourceError('Tổng dung lượng ảnh vượt MAX_OUTPUT_GIB; chọn ít phân vùng hơn.')
                 completed = 0
-                for name in names:
-                    progress.name, progress.phase = name + '.img', 'Trích xuất và kiểm tra SHA-256'
-                    async def extracted(count, size):
-                        progress.percent = min(99, 100 * (completed + count * .6) / total)
-                    file = await payload.extract(name, directory, extracted)
-                    progress.phase = 'Upload Google Drive'
-                    async def uploaded(count, size):
-                        progress.percent = min(99, 100 * (completed + size * .6 + count * .4) / total)
-                    record = await drive.upload(file, task_id, owner, uploaded)
-                    result['files'].append(record)
-                    Path(file['path']).unlink()
-                    completed += file['size']
+                multiple = len(names) > 1
+                with Bundle(directory, task_id) if multiple else nullcontext() as bundle:
+                    for name in names:
+                        progress.name, progress.phase = name + '.img', 'Trích xuất và kiểm tra SHA-256'
+                        async def extracted(count, size):
+                            progress.percent = (70 * completed + 60 * count) / total if multiple else 60 * count / total
+                        file = await payload.extract(name, directory, extracted)
+                        if multiple:
+                            progress.phase = 'Nén phân vùng vào ZIP'
+                            await bundle.add(file)
+                            completed += file['size']
+                            progress.percent = 70 * completed / total
+                    if multiple:
+                        progress.phase = 'Hoàn tất ZIP và kiểm tra SHA-256'
+                        file = await bundle.finish()
+                progress.name, progress.phase = file['name'], 'Upload Google Drive'
+                async def uploaded(count, size):
+                    progress.percent = min(99, (70 if multiple else 60) + (30 if multiple else 40) * count / size)
+                record = await drive.upload(file, task_id, owner, uploaded)
+                if file.get('members'):
+                    record['members'] = file['members']
+                result['files'].append(record)
+                result['partition_count'] = len(names)
+                Path(file['path']).unlink()
                 result['downloaded_bytes'] = remote.downloaded
                 result['source_bytes'] = remote.size
                 result['state'] = 'done'
@@ -92,7 +108,7 @@ async def run():
     finally:
         ticker.cancel(); await asyncio.gather(ticker, return_exceptions=True)
         if result['state'] == 'done':
-            await progress.render(f'✅ {task_id} — 100%\nĐã trích xuất và upload {len(result["files"])} phân vùng.')
+            await progress.render(f'✅ {task_id} — 100%\nĐã trích xuất {result["partition_count"]} phân vùng và upload 1 file lên Drive.')
         else:
             await progress.render('❌ ' + task_id + ' — ' + result.get('error', 'Runner bị ngắt.'))
         try:
@@ -107,7 +123,7 @@ async def run():
         # Directory is fixed by validated task ID, never by source filename.
         if directory.exists():
             for file in directory.iterdir():
-                if file.is_file() and file.suffix in {'.img', '.partial'}:
+                if file.is_file() and file.suffix in {'.img', '.zip', '.partial'}:
                     file.unlink()
         await tg.close()
     return 0 if result['state'] == 'done' else 1
