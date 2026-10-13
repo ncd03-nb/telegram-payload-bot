@@ -67,7 +67,7 @@ class Actions:
             location = r.headers["Location"]
         # No GitHub credential is forwarded to signed artifact storage.
         async with self.session.get(location) as r:
-            raw = await r.content.read(131073)
+            raw = await read_limited(r.content, 131072)
             if r.status != 200 or len(raw) > 131072:
                 raise SourceError("Artifact kết quả không hợp lệ.")
         return decode_result(raw, job_id)
@@ -96,6 +96,18 @@ class Actions:
                 # Reconcile after transient connection failures, including controller restart.
                 pass
             await asyncio.sleep(15)
+
+
+async def read_limited(stream, limit):
+    # StreamReader.read(n) may return a short network frame before EOF.
+    data = bytearray()
+    while True:
+        block = await stream.read(min(65536, limit+1-len(data)))
+        if not block:
+            return bytes(data)
+        data.extend(block)
+        if len(data)>limit:
+            raise SourceError('Artifact kết quả vượt kích thước cho phép.')
 
 
 def decode_result(raw, job_id):

@@ -68,7 +68,7 @@ jobs:
           DECODE_WORKERS: ${{ vars.DECODE_WORKERS || '2' }}
           DRIVE_CHUNK_MIB: ${{ vars.DRIVE_CHUNK_MIB || '32' }}
         run: |
-          docker run --rm --name payload-worker --stop-timeout 25 \
+          docker run --rm --network host --name payload-worker --stop-timeout 25 \
             -v "$RUNNER_TEMP/payload-config:/config" -v "$RUNNER_TEMP/payload-data:/data" \
             -v "$RUNNER_TEMP/payload-result:/result" \
             -e TELEGRAM_BOT_TOKEN -e ALLOWED_USER_IDS -e GOOGLE_TOKEN_B64 \

@@ -27,7 +27,7 @@ jobs:
           docker build -t payload-benchmark .
           mkdir -p "$RUNNER_TEMP/drive-benchmark-results"
           sudo chown 10001:10001 "$RUNNER_TEMP/drive-benchmark-results"
-          sudo chmod 700 "$RUNNER_TEMP/drive-benchmark-results"
+          sudo chmod 755 "$RUNNER_TEMP/drive-benchmark-results"
       - name: Measure Docker bridge and host network
         env:
           GOOGLE_TOKEN_B64: ${{ secrets.GOOGLE_TOKEN_B64 }}

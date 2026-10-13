@@ -48,7 +48,9 @@ Runner mặc định tải trước 8 nhóm Range song song, gom các operation 
 
 Kiểm tra SHA-256 từng operation và ảnh cuối vẫn bắt buộc. SHA-256 và MD5 cuối được tính trong một lượt đọc; upload tái sử dụng MD5 đã kiểm tra. Drive resumable dùng chunk 32 MiB, vẫn xác nhận offset khi mất phản hồi và đối chiếu checksum/kích thước trên Drive. ZIP64 vẫn dùng DEFLATE level 1 để cân bằng CPU và dung lượng upload. Tin tiến độ hiện dung lượng và tốc độ trung bình MiB/s, cập nhật 15 giây/lần.
 
-Có thể chỉnh Actions variables `EXTRACT_WORKERS` (1–16, mặc định 8), `RANGE_BATCH_MIB` (1–32, mặc định 8), `DECODE_WORKERS` (1–4, mặc định 2), `DRIVE_CHUNK_MIB` (1–64, mặc định 32). Số luồng cao hơn không đảm bảo nhanh hơn nếu CDN hoặc CPU giới hạn; đo lại trên cùng nguồn khi chỉnh. Script setup đồng bộ các biến này từ `.env`. Tác vụ đang chạy giữ bản mã đã checkout; tối ưu áp dụng cho tác vụ mới.
+Có thể chỉnh Actions variables `EXTRACT_WORKERS` (1–16, mặc định 8), `RANGE_BATCH_MIB` (1–32, mặc định 8), `DECODE_WORKERS` (1–4, mặc định 2), `DRIVE_CHUNK_MIB` (1–256, mặc định 32). Số luồng hoặc khối upload lớn hơn không đảm bảo nhanh hơn nếu CDN, CPU hoặc đường mạng giới hạn; đo lại trên cùng nguồn khi chỉnh. Script setup đồng bộ các biến này từ `.env`. Tác vụ đang chạy giữ bản mã đã checkout; tối ưu áp dụng cho tác vụ mới.
+
+Workflow thủ công **Measure Drive upload throughput** đo cùng dữ liệu trên runner trực tiếp và Docker (bridge/host), mỗi chế độ hai lần. File thử 1,5 GiB được upload riêng tư, kiểm tra MD5/kích thước rồi xóa cùng thư mục tác vụ thử. Workflow lưu artifact số đo hai ngày; không gửi tin Telegram hoặc thay đổi file ROM của người dùng. Script `scripts/benchmark_drive.py` hỗ trợ `BENCHMARK_CHUNKS` và `BENCHMARK_SIZE_MIB` để đo cấu hình khác; mặc định khi chạy script riêng là file 512 MiB với các khối 32/128/256/32 MiB.
 
 ## Kiểm thử
 
