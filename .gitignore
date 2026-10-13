@@ -1,0 +1,9 @@
+.env
+config/*
+!config/.gitkeep
+data/*
+!data/.gitkeep
+.venv/
+__pycache__/
+*.pyc
+.tools/

@@ -1,0 +1,22 @@
+services:
+  bot:
+    build: .
+    image: telegram-payload-bot:local
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8082}:${PORT:-8080}"
+    mem_limit: 768m
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,69 @@
+name: Extract payload partitions to Google Drive
+run-name: extract-${{ inputs.job_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        required: true
+        type: string
+      source_url:
+        required: true
+        type: string
+      partitions:
+        required: true
+        type: string
+      owner:
+        required: true
+        type: string
+      chat:
+        required: true
+        type: string
+      message_id:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: payload-${{ inputs.job_id }}
+  cancel-in-progress: false
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build extraction container
+        run: docker build -t payload-worker .
+      - name: Prepare private directories
+        run: |
+          mkdir -p "$RUNNER_TEMP/payload-config" "$RUNNER_TEMP/payload-data" "$RUNNER_TEMP/payload-result"
+          sudo chown -R 10001:10001 "$RUNNER_TEMP/payload-config" "$RUNNER_TEMP/payload-data" "$RUNNER_TEMP/payload-result"
+          sudo chmod 700 "$RUNNER_TEMP/payload-config" "$RUNNER_TEMP/payload-data"
+      - name: Extract, verify SHA-256, upload to Drive
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ALLOWED_USER_IDS: ${{ secrets.ALLOWED_USER_IDS }}
+          GOOGLE_TOKEN_B64: ${{ secrets.GOOGLE_TOKEN_B64 }}
+          JOB_ID: ${{ inputs.job_id }}
+          JOB_SOURCE_URL: ${{ inputs.source_url }}
+          JOB_PARTITIONS: ${{ inputs.partitions }}
+          JOB_OWNER: ${{ inputs.owner }}
+          JOB_CHAT: ${{ inputs.chat }}
+          JOB_MESSAGE_ID: ${{ inputs.message_id }}
+        run: |
+          docker run --rm --name payload-worker --stop-timeout 25 \
+            -v "$RUNNER_TEMP/payload-config:/config" -v "$RUNNER_TEMP/payload-data:/data" \
+            -v "$RUNNER_TEMP/payload-result:/result" \
+            -e TELEGRAM_BOT_TOKEN -e ALLOWED_USER_IDS -e GOOGLE_TOKEN_B64 \
+            -e JOB_ID -e JOB_SOURCE_URL -e JOB_PARTITIONS -e JOB_OWNER -e JOB_CHAT -e JOB_MESSAGE_ID \
+            -e RESULT_PATH=/result/result.json payload-worker python -m app.runner
+      - name: Store verified result metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ inputs.job_id }}
+          path: ${{ runner.temp }}/payload-result/result.json
+          if-no-files-found: ignore
+          retention-days: 2
