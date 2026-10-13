@@ -67,3 +67,11 @@ Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-
 - Kiểm thử bản mới trực tiếp trên [GitHub Actions run 38351090632](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38351090632), job `1febaf69476c`: `vendor` OPPO trích 9,724 giây + checksum 0,804 giây; `boot` trích 2,775 giây + checksum 0,220 giây. SHA-256 vendor khớp manifest và benchmark local. Vendor dùng 33 nhóm/35 request (bao gồm retry), boot chỉ tải 3 request và giữ zero extents sparse.
 - Hai ảnh được đóng thành một ZIP 317.079.656 byte, upload bằng chunk 32 MiB trong 15,774 giây (gồm chuẩn bị thư mục/session). Drive xác nhận MD5/kích thước, quyền anyone/reader; runner `done`, `notified=true`. Báo cáo ở `data/performance-actions-report.json`.
 - [CI cho mã 34c8c72](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38351021358) thành công. Controller health HTTP 200; job đang chạy trước triển khai tiếp tục được observe, không tự gửi lại workflow.
+
+## CDN OPPO ghi Content-Encoding UTF-8
+
+- Link downloadCheck mới do người dùng cung cấp ngày 13/10/2026 trả redirect 302 đến ZIP 10.107.859.168 byte. CDN AliyunOSS trả Range 206 đúng byte/Content-Range nhưng ghi `Content-Encoding: UTF-8` cho dữ liệu ZIP nguyên bản; kiểm tra chỉ cho phép `identity` trước đây khiến bot báo lỗi HTTP 206.
+- Chấp nhận nhãn `utf-8`/`utf8` với `auto_decompress=False`; vẫn bắt buộc Content-Range đúng, số byte chính xác, kích thước/ETag nhất quán và SHA-256 ảnh đúng manifest. gzip và các content coding khác vẫn bị từ chối. Lỗi thiếu Content-Range và lỗi content coding được báo riêng.
+- 43 tests đạt trên Windows Python 3.14 và Docker Linux Python 3.12. Regression tests trích ảnh từ Range gắn nhãn UTF-8, từ chối gzip, Content-Range thiếu/sai và byte thừa.
+- Đã đọc được 67 phân vùng và trích hoàn chỉnh `my_stock.img` từ đúng link mới trên máy local: 3.389.886.464 byte, SHA-256 `7b5e08bc17382d724a67e08ab44d8cec467f86b9d5a3f9f8f41d11e1d0584e5b` đúng manifest. Trích 78,621 giây, checksum 12,859 giây; 354 request dữ liệu, 358 nhóm/1.617 operations. Đây là phép thử local, không gồm upload Drive hoặc chờ Actions; ảnh thử đã xóa, báo cáo giữ riêng ở `data/header-fix/report.json`.
+- Mã sửa `7557dc4` đã đẩy lên GitHub, Docker controller đã cập nhật và health HTTP 200. Không tự chạy lại tác vụ người dùng đã thất bại tại bước scan; gửi lại lệnh để nhận file trên Drive.
