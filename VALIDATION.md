@@ -93,3 +93,10 @@ Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-
 - Regression tests kiểm tra host CN nhận header updater, dùng redirect đã validate, chặn host giả mạo có tên miền tương tự và redirect đến IP nội bộ. 48 tests đạt trên Windows Python 3.14 và Docker Python 3.12; [CI 3532d52](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38391714916) thành công.
 - Đã trích `vbmeta.img` 8.192 byte trên local, SHA-256 `464bf0a96cc9ad0b64fd26c695e8ef2842eebccd55eaea9dfb70420014d73d2c` khớp manifest; ảnh local đã xóa, báo cáo riêng ở `data/oppo-cn-test/report.json`.
 - [Actions run 38391801432](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38391801432), job `f3771277a25d`, trích cùng vbmeta đúng SHA-256, upload Drive kiểm tra MD5/kích thước và gửi nút tải Telegram (`done`, `notified=true`). Chỉ thử trích vbmeta, không tuyên bố đã trích cả 74 phân vùng. Báo cáo riêng ở `data/oppo-cn-actions-report.json`; URL ký nằm trong config riêng, không commit.
+
+## Dọn dữ liệu thử ngày 13/10/2026
+
+- Theo yêu cầu người dùng, đã xóa 13 file thử trên Drive (3.967.232.864 byte) và 9 thư mục thử sau khi đối chiếu appProperties/mã tác vụ; chỉ xóa thư mục khi không còn file bên trong. Tám tác vụ thử có update_id âm đã được gỡ khỏi lịch sử/outputs để bot không trả link file đã xóa.
+- Giữ nguyên cả 9 file của 8 tác vụ người dùng; xác minh lại IDs qua Drive API sau khi dọn. File benchmark đã tự xóa ở các lần đo trước không nằm trong số 13 file này.
+- Xóa 59 file trên máy, tổng 218.429.513 byte: ảnh IMG thử, báo cáo tạm, metadata mẫu, URL thử và cache Python; chỉ gỡ các thư mục đã rỗng trong workspace. Báo cáo chi tiết trước đây được đề cập trong tài liệu đã được dọn; kết quả xác minh tổng hợp/SHA-256 vẫn giữ ở tài liệu này.
+- Giữ `.env`, Google client/OAuth, SQLite đang dùng, mã nguồn và toàn bộ tests. Giữ một báo cáo dọn duy nhất ở `data/cleanup-report.json` (không commit). Docker đã khởi động lại; bot health HTTP 200, không còn tác vụ đang chạy khi dọn.
