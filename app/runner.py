@@ -28,7 +28,8 @@ def selection(text, parts):
 async def send_file(telegram, chat, file, reply_to=None, thread_id=None):
     is_zip = file['name'].endswith('.zip')
     detail = (f"\n📦 {len(file['members'])} phân vùng\n" + ', '.join(member['name'] for member in file['members'])) if file.get('members') else ''
-    await telegram.send(chat, f"✅ Hoàn thành\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB" + detail,
+    version = file.get('rom_version') or 'Không xác định'
+    await telegram.send(chat, f"✅ Hoàn thành\n📱 ROM: {version}\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB" + detail,
         reply_markup={'inline_keyboard': [[{'text': '⬇ Tải ZIP từ Drive' if is_zip else '⬇ Tải .img từ Drive', 'url': file['url']}]]},
         **({'reply_to':reply_to} if reply_to else {}), **({'thread_id':thread_id} if thread_id else {}))
 
@@ -99,6 +100,7 @@ async def run():
                 async def uploaded(count, size):
                     progress.percent = min(99, (70 if multiple else 60) + (30 if multiple else 40) * count / size)
                 record = await drive.upload(file, task_id, owner, uploaded, public=s.public_files)
+                record['rom_version'] = remote.rom_version
                 if file.get('members'):
                     record['members'] = file['members']
                 result['files'].append(record)

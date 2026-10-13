@@ -3,11 +3,13 @@ import asyncio
 import json
 import re
 import struct
+import zlib
 from urllib.parse import urljoin, urlsplit
 
 import aiohttp
 
 from .security import PublicResolver, SourceError, validate_url
+from .rom import version_from_url, version_from_metadata
 
 
 class Remote:
@@ -17,6 +19,7 @@ class Remote:
         self.etag = None
         self.downloaded = 0
         self.session = None
+        self.rom_version = version_from_url(url)
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
@@ -80,6 +83,7 @@ class Remote:
                         if await r.content.read(1):
                             raise SourceError('Máy chủ trả thừa byte Range.')
                         self.size, self.url = total, current
+                        self.rom_version = self.rom_version or version_from_url(current)
                         self.etag = self.etag or r.headers.get('ETag')
                         self.downloaded += len(raw)
                         return raw
@@ -116,7 +120,7 @@ class Remote:
         if count > 50000 or cd_size > 8 * 1024**2 or cd_size < 46:
             raise SourceError('ZIP directory vượt giới hạn.')
         directory = await self.read(cd_offset, cd_size)
-        cursor, found = 0, []
+        cursor, found, metadata = 0, [], []
         for _ in range(count):
             if cursor + 46 > len(directory):
                 raise SourceError('ZIP directory bị cắt ngắn.')
@@ -130,6 +134,8 @@ class Remote:
             name = directory[cursor+46:cursor+46+name_len]
             extra = directory[cursor+46+name_len:cursor+46+name_len+extra_len]
             cursor = next_cursor
+            if name == b'META-INF/com/android/metadata':
+                metadata.append(entry)
             if name != b'payload.bin':
                 continue
             if entry[3] & 1 or entry[4] != 0:
@@ -164,4 +170,32 @@ class Remote:
             found.append((start, usize))
         if len(found) != 1:
             raise SourceError('ZIP cần chứa đúng một file payload.bin ở thư mục gốc.')
+        if len(metadata) == 1:
+            try:
+                version = await self.metadata_version(metadata[0], cd_offset)
+                if version and (not version.startswith('Build ') or not self.rom_version):
+                    self.rom_version = version
+            except (SourceError, zlib.error):
+                # Optional metadata must not prevent extraction of a valid payload.
+                pass
         return found[0]
+
+    async def metadata_version(self, entry, cd_offset):
+        flags, method, crc, csize, usize, offset = entry[3], entry[4], entry[7], entry[8], entry[9], entry[16]
+        if flags & 1 or method not in {0, 8} or not 0 < usize <= 65536 or not 0 < csize <= 131072 or offset == 0xffffffff:
+            return ''
+        local = struct.unpack('<4s5H3I2H', await self.read(offset, 30))
+        if local[0] != b'PK\x03\x04' or local[2] & 1 or local[3] != method:
+            return ''
+        start = offset + 30 + local[9] + local[10]
+        if start + csize > cd_offset:
+            return ''
+        raw = await self.read(start, csize)
+        if method == 8:
+            decoder = zlib.decompressobj(-15)
+            raw = decoder.decompress(raw, usize + 1)
+            if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+                return ''
+        if len(raw) != usize or zlib.crc32(raw) != crc:
+            return ''
+        return version_from_metadata(raw)

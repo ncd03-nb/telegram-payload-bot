@@ -42,3 +42,10 @@ Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-
 - Bot API `getMe` xác nhận `can_join_groups=true`, `can_read_all_group_messages=true` sau khi người dùng tắt Privacy.
 - 25 tests đạt trên Windows Python 3.14 và Docker Linux Python 3.12. Tests bao gồm người dùng ngoài whitelist trong chế độ public, lệnh không có username trong supergroup, reply/topic, truyền owner/chat/thread vào Actions, từ chối đọc kết quả/hủy tác vụ của người khác, bỏ qua hội thoại/lệnh bot khác và chia sẻ file chỉ sau checksum đạt.
 - Kiểm thử group ở mức handler/API payload, chưa kiểm thử đầu-cuối trong group thật vì chưa có group được thêm bot trong phiên này. Báo cáo ZIP nằm trong `data/zip-xiaomi-report.json`, `data/zip-oppo-report.json`, không commit.
+
+## Phiên bản ROM trong kết quả
+
+- Kết quả mới lưu `rom_version` trong metadata artifact/outputs để `/files` hiển thị lại cùng phiên bản.
+- Đọc lại directory và metadata của hai URL thật: Xiaomi hiển thị `OS4.0.24.0.XEOCNXM` từ tên ZIP; mã build nội bộ trong metadata không thay thế phiên bản này. Chỉ đọc khoảng 67 KiB, không tải lại phân vùng.
+- Với URL OPPO mẫu, tên ZIP là hash, nội dung metadata không phải văn bản đọc được; kết quả hiển thị “Không xác định”. Không suy đoán phiên bản từ hash/token URL. Với metadata target build dạng văn bản hoặc tên gói có phiên bản OPlus, bot tự nhận diện.
+- 32 tests đạt trên Windows; thêm tests metadata stored/deflate, CRC lỗi, metadata quá lớn, bỏ qua query URL, phân biệt target/pre-build, ưu tiên phiên bản dễ đọc hơn mã build nội bộ và định dạng kết quả giữ reply/topic/tên phân vùng.
