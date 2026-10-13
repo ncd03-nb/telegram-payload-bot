@@ -16,6 +16,10 @@ from app.gdrive import Drive
 
 async def main():
     report = []
+    size_mib = int(os.getenv('BENCHMARK_SIZE_MIB','512'))
+    chunks = [int(x) for x in os.getenv('BENCHMARK_CHUNKS','32,128,256,32').split(',')]
+    if not 1 <= size_mib <= 4096 or not chunks or len(chunks)>4 or any(not 1<=x<=256 for x in chunks):
+        raise ValueError('Invalid benchmark bounds')
     with tempfile.TemporaryDirectory() as directory:
         folder = Path(directory)
         token = folder/'token.json'
@@ -25,11 +29,11 @@ async def main():
         block = os.urandom(1024**2)
         sha, md5 = hashlib.sha256(), hashlib.md5()
         with path.open('wb') as f:
-            for _ in range(512):
+            for _ in range(size_mib):
                 f.write(block); sha.update(block); md5.update(block)
         file = {'path':str(path),'name':path.name,'size':path.stat().st_size,
                 'sha256':sha.hexdigest(),'md5':md5.hexdigest()}
-        for chunk in (32,128,256,32):
+        for chunk in chunks:
             task_id = uuid.uuid4().hex[:12]
             async with Drive(token,chunk_mib=chunk) as drive:
                 parent = await drive.folder(task_id)
@@ -39,7 +43,7 @@ async def main():
                     seconds = time.monotonic()-started
                     # Exact checksum/size were verified by Drive.upload.
                     await drive.api('DELETE','files/'+uploaded['id'])
-                    row = {'chunk_mib':chunk,'bytes':file['size'],'seconds':round(seconds,3),
+                    row = {'mode':os.getenv('BENCHMARK_MODE','native'),'chunk_mib':chunk,'bytes':file['size'],'seconds':round(seconds,3),
                            'mib_s':round(file['size']/1024**2/seconds,2),'verified':True,'deleted':True}
                     report.append(row)
                     print(json.dumps(row),flush=True)

@@ -18,10 +18,34 @@ jobs:
       - name: Compare chunks and delete private test files
         env:
           GOOGLE_TOKEN_B64: ${{ secrets.GOOGLE_TOKEN_B64 }}
-          RESULT_PATH: ${{ runner.temp }}/drive-benchmark.json
+          BENCHMARK_CHUNKS: '32,32'
+          BENCHMARK_SIZE_MIB: '1536'
+          RESULT_PATH: ${{ runner.temp }}/drive-benchmark-native.json
         run: python -u scripts/benchmark_drive.py
+      - name: Build worker and private benchmark directory
+        run: |
+          docker build -t payload-benchmark .
+          mkdir -p "$RUNNER_TEMP/drive-benchmark-results"
+          sudo chown 10001:10001 "$RUNNER_TEMP/drive-benchmark-results"
+          sudo chmod 700 "$RUNNER_TEMP/drive-benchmark-results"
+      - name: Measure Docker bridge and host network
+        env:
+          GOOGLE_TOKEN_B64: ${{ secrets.GOOGLE_TOKEN_B64 }}
+          BENCHMARK_CHUNKS: '32,32'
+          BENCHMARK_SIZE_MIB: '1536'
+        run: |
+          for mode in bridge host; do
+            docker run --rm --network "$mode" \
+              -v "$RUNNER_TEMP/drive-benchmark-results:/result" \
+              -e GOOGLE_TOKEN_B64 -e BENCHMARK_CHUNKS -e BENCHMARK_SIZE_MIB \
+              -e "BENCHMARK_MODE=$mode" -e "RESULT_PATH=/result/drive-benchmark-$mode.json" \
+              payload-benchmark python -u scripts/benchmark_drive.py
+          done
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: drive-benchmark
-          path: ${{ runner.temp }}/drive-benchmark.json
+          path: |
+            ${{ runner.temp }}/drive-benchmark-native.json
+            ${{ runner.temp }}/drive-benchmark-results/*.json
           retention-days: 2
