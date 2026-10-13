@@ -12,10 +12,13 @@ from .security import SourceError
 
 
 class Drive:
-    def __init__(self, token_path):
+    def __init__(self, token_path, chunk_mib=8):
+        if not 1 <= chunk_mib <= 64:
+            raise ValueError('Invalid Drive chunk size')
         self.path = Path(token_path)
         self.access, self.expiry = '', 0
         self.lock = asyncio.Lock()
+        self.chunk_bytes = chunk_mib*1024**2
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180), trust_env=False)
@@ -66,8 +69,10 @@ class Drive:
         path, total = Path(result['path']), result['size']
         if path.stat().st_size != total:
             raise SourceError('Kích thước ảnh thay đổi trước upload.')
-        with path.open('rb') as f:
-            md5 = await asyncio.to_thread(lambda: hashlib.file_digest(f, 'md5').hexdigest())
+        md5 = result.get('md5','')
+        if not re.fullmatch(r'[a-f0-9]{32}',md5):
+            with path.open('rb') as f:
+                md5 = await asyncio.to_thread(lambda: hashlib.file_digest(f, 'md5').hexdigest())
         body = {'name': result['name'], 'parents': [await self.folder(task_id)],
                 'appProperties': {'payload_task': task_id, 'payload_owner': str(owner), 'sha256': result['sha256']}}
         fields = 'id,name,size,md5Checksum,webViewLink,webContentLink'
@@ -85,7 +90,7 @@ class Drive:
         with path.open('rb') as f:
             while uploaded is None:
                 f.seek(offset)
-                chunk = b'' if query else f.read(min(8 * 1024**2, total-offset))
+                chunk = b'' if query else f.read(min(self.chunk_bytes, total-offset))
                 content_range = f'bytes */{total}' if query else f'bytes {offset}-{offset+len(chunk)-1}/{total}'
                 try:
                     async with self.session.put(location, data=chunk, allow_redirects=False,

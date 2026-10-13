@@ -38,8 +38,13 @@ def main():
     for name,value in secrets.items():
         api('PUT','/repos/'+repo+'/actions/secrets/'+name,{'key_id':key['key_id'],'encrypted_value':base64.b64encode(box.encrypt(value.encode())).decode()})
         print('Configured secret:',name)
-    for name in ('PUBLIC_BOT','ALLOW_GROUPS','PUBLIC_FILES'):
-        value = 'true' if env.get(name,'false').lower() in {'true','1','yes'} else 'false'
+    variables={name:('true' if env.get(name,'false').lower() in {'true','1','yes'} else 'false')
+               for name in ('PUBLIC_BOT','ALLOW_GROUPS','PUBLIC_FILES')}
+    for name,default,limit in (('EXTRACT_WORKERS',8,16),('RANGE_BATCH_MIB',8,32),('DECODE_WORKERS',2,4),('DRIVE_CHUNK_MIB',32,64)):
+        value=int(env.get(name,str(default)))
+        if not 1 <= value <= limit: raise SystemExit('Invalid '+name)
+        variables[name]=str(value)
+    for name,value in variables.items():
         path='/repos/'+repo+'/actions/variables'
         exists=api('GET',path+'/'+name) is not None
         api('PATCH' if exists else 'POST',path+'/'+name if exists else path,{'name':name,'value':value})

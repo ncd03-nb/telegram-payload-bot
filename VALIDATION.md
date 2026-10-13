@@ -55,3 +55,12 @@ Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-
 - Nguyên nhân job `66a2cf055bf5` chờ: controller cũ chỉ có một worker, đang observe `b1d47d5fa9de`; job mới chưa được dispatch (không có run ID/dispatch timestamp).
 - Controller hiện có scheduler với observer riêng từng tác vụ, `MAX_CONCURRENT_JOBS=0` bỏ trần chạy song song tại bot. Giới hạn tiếp nhận vẫn giữ như README; giới hạn runner của GitHub áp dụng cho cả tài khoản.
 - 35 tests đạt trên Windows: 6 tác vụ cùng được observe trong khi job đầu chưa hoàn tất; job đã dispatch được resume, không gửi trùng; cấu hình giới hạn tùy chọn trả slot cho job tiếp theo; shutdown hủy observers nhưng giữ trạng thái để phục hồi; job đã hủy không được dispatch.
+
+## Pipeline nhanh cho phân vùng lớn
+
+- Benchmark local bằng cùng URL OPPO, xuất toàn bộ `vendor` 362,15 MiB và kiểm tra SHA-256 theo manifest ở cả hai phiên bản: bản tuần tự `d68e62d` mất 38,643 giây/182 request; bản gom Range 8 MiB + prefetch 8 + decode 2 mất 11,781 giây/33 request. Cả hai tải 232,97 MiB dữ liệu và SHA-256 giống nhau: `f0d06418ceebbdfa074c2514d7eeee062d37c574460f4c4fedfbac9f4fbfc9cf`. Thời gian gồm trích và kiểm tra ảnh, chưa gồm upload Drive/ZIP hay chờ runner; không đảm bảo hệ số tăng tốc trên CDN/ROM khác.
+- Pipeline xử lý nhóm hoàn tất trước, giữ extents độc lập và kiểm tra hash toàn ảnh. Thêm tests nhóm đến sai thứ tự, một request chậm không chặn cửa sổ tải tiếp, hash hỏng, cancellation dọn file/tasks, extents chồng lấn, upload chunk lớn và tái sử dụng MD5 đã kiểm tra.
+- Báo cáo benchmark nằm trong `data/speed-benchmark/report.json`, không commit URL hoặc file ảnh.
+- Xiaomi `system_ext` 780,17 MiB: bản tuần tự mất 311,693 giây/391 request; bản prefetch/gom nhóm mất 20,291 giây/74 request. SHA-256 đúng manifest ở cả hai: `37530880b9d7df04157d8da48c63bd4d4d66c73e52df6c9ad94985c904306abc`.
+- Đo lại bản xử lý nhóm hoàn tất trước và so cấu hình 8/8, 8/16, 16/16 (luồng tải/MiB mỗi Range), vẫn decode 2: cấu hình 8/8 đạt OPPO 9,712 giây, Xiaomi 18,355 giây; 8/16 đạt 9,879 và 18,502 giây. Chọn 8/8 mặc định vì tăng nhóm/luồng không cải thiện thời gian trong phép thử này. Kết quả đo gồm checksum, không gồm ZIP/upload; tốc độ CDN, tải CPU/mạng local có thể dao động. Báo cáo cấu hình ở `data/speed-benchmark/tuning.json`.
+- 41 tests đạt trên Windows Python 3.14 và Docker Linux Python 3.12, bao gồm pipeline hủy/lỗi/các nhóm sai thứ tự và phục hồi Actions đang chạy.

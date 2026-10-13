@@ -39,9 +39,10 @@ class Progress:
         self.tg, self.chat, self.message, self.id = tg, chat, message, task_id
         self.phase, self.name, self.percent = 'Đọc payload', '', 0
         self.started = time.monotonic()
+        self.detail = ''
 
     async def render(self, final=None):
-        text = final or f"⚙️ {self.id} — {self.phase}\n📄 {self.name}\nTiến độ: {self.percent:.1f}%\nThời gian: {int(time.monotonic()-self.started)} giây"
+        text = final or f"⚙️ {self.id} — {self.phase}\n📄 {self.name}\nTiến độ: {self.percent:.1f}%\nThời gian: {int(time.monotonic()-self.started)} giây" + ('\n'+self.detail if self.detail else '')
         try:
             await self.tg.edit(self.chat, self.message, text)
         except Exception:
@@ -74,7 +75,7 @@ async def run():
     directory = s.data_dir / task_id
     try:
         async with asyncio.timeout(19800):
-            async with Remote(os.environ['JOB_SOURCE_URL']) as remote, Drive(s.google_token) as drive:
+            async with Remote(os.environ['JOB_SOURCE_URL'],concurrency=s.extract_workers) as remote, Drive(s.google_token,chunk_mib=s.drive_chunk_mib) as drive:
                 payload = await Payload(remote).load()
                 names = selection(os.environ['JOB_PARTITIONS'], payload.parts)
                 total = sum(payload.parts[n]['size'] for n in names)
@@ -82,14 +83,22 @@ async def run():
                     raise SourceError('Tổng dung lượng ảnh vượt MAX_OUTPUT_GIB; chọn ít phân vùng hơn.')
                 completed = 0
                 multiple = len(names) > 1
+                result['extraction_metrics'] = []
                 with Bundle(directory, task_id) if multiple else nullcontext() as bundle:
                     for name in names:
                         progress.name, progress.phase = name + '.img', 'Trích xuất và kiểm tra SHA-256'
+                        part_started = time.monotonic()
                         async def extracted(count, size):
                             progress.percent = (70 * completed + 60 * count) / total if multiple else 60 * count / total
-                        file = await payload.extract(name, directory, extracted)
+                            rate=count/1024**2/max(.001,time.monotonic()-part_started)
+                            progress.detail=f'Trích: {count/1024**2:.0f}/{size/1024**2:.0f} MiB · {rate:.1f} MiB/s'
+                        file = await payload.extract(name,directory,extracted,workers=s.extract_workers,
+                            batch_bytes=s.range_batch_mib*1024**2,decode_workers=s.decode_workers)
+                        result['extraction_metrics'].append({'partition':name,**file['metrics']})
+                        print('Extraction metrics: '+json.dumps(result['extraction_metrics'][-1]),flush=True)
                         if multiple:
                             progress.phase = 'Nén phân vùng vào ZIP'
+                            progress.detail = ''
                             await bundle.add(file)
                             completed += file['size']
                             progress.percent = 70 * completed / total
@@ -97,9 +106,14 @@ async def run():
                         progress.phase = 'Hoàn tất ZIP và kiểm tra SHA-256'
                         file = await bundle.finish()
                 progress.name, progress.phase = file['name'], 'Upload Google Drive'
+                upload_started = time.monotonic(); progress.detail = ''
                 async def uploaded(count, size):
                     progress.percent = min(99, (70 if multiple else 60) + (30 if multiple else 40) * count / size)
+                    rate=count/1024**2/max(.001,time.monotonic()-upload_started)
+                    progress.detail=f'Upload: {count/1024**2:.0f}/{size/1024**2:.0f} MiB · {rate:.1f} MiB/s'
                 record = await drive.upload(file, task_id, owner, uploaded, public=s.public_files)
+                result['upload_metrics'] = {'seconds':round(time.monotonic()-upload_started,3),
+                    'chunk_mib':s.drive_chunk_mib,'bytes':file['size']}
                 record['rom_version'] = remote.rom_version
                 if file.get('members'):
                     record['members'] = file['members']

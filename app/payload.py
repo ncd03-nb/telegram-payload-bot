@@ -9,9 +9,11 @@ import lzma
 import re
 import shutil
 import struct
+import time
 from pathlib import Path
 
 from .security import SourceError
+from .threads import thread_call
 
 
 def varint(data, pos):
@@ -100,47 +102,113 @@ class Payload:
         return [{'name': p['name'], 'size': p['size'], 'supported': p['supported'], 'sha256': p['hash'].hex()}
                 for p in self.parts.values()]
 
-    async def extract(self, name, directory, progress=None):
+    async def extract(self, name, directory, progress=None, workers=8, batch_bytes=8*1024**2, decode_workers=2):
         part = self.parts.get(name)
         if not part or not part['supported']:
             raise SourceError(f'{name}: không tồn tại hoặc dùng delta operation cần ROM gốc.')
         directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
-        if shutil.disk_usage(directory).free < part['size'] + 256 * 1024**2:
+        if shutil.disk_usage(directory).free < part['size'] + 256*1024**2:
             raise SourceError('Runner không đủ dung lượng trống cho phân vùng này.')
         path = directory / (name + '.img')
         partial = directory / (name + '.img.partial')
+        if not 1 <= workers <= 16 or not 1 <= decode_workers <= 4 or not 1 <= batch_bytes <= 32*1024**2:
+            raise ValueError('Invalid extraction pipeline limits')
+        groups = operation_groups(part, self.block, self.base, self.end, batch_bytes)
+        cpu_slots = asyncio.Semaphore(decode_workers)
+        async def prepare(group):
+            raw = await self.remote.read(self.base+group['offset'],group['length']) if group['length'] else b''
+            async with cpu_slots:
+                return await thread_call(decode_group, group, raw)
+        tasks = {}
+        started, requests_before = time.monotonic(), getattr(self.remote,'requests',0)
         done = 0
         try:
             with partial.open('w+b') as out:
                 out.truncate(part['size'])
-                for op in part['ops']:
-                    extents = [(start * self.block, count * self.block) for start, count in op['extents']]
-                    if not extents or any(a < 0 or n <= 0 or a+n > part['size'] for a,n in extents):
-                        raise SourceError('Extent vượt kích thước phân vùng.')
-                    expected = sum(n for _, n in extents)
-                    if expected > 64 * 1024**2 or op['length'] > 32 * 1024**2 or op['offset'] < 0 or self.base+op['offset']+op['length'] > self.end:
-                        raise SourceError('Operation vượt giới hạn an toàn.')
-                    if op['type'] in {6, 7}:
-                        data = bytes(expected)
-                    else:
-                        raw = await self.remote.read(self.base + op['offset'], op['length'])
-                        if op['hash'] and hashlib.sha256(raw).digest() != op['hash']:
-                            raise SourceError('SHA-256 dữ liệu operation không khớp.')
-                        data = await asyncio.to_thread(decompress, raw, op['type'], expected)
-                    consumed = 0
-                    for offset, size in extents:
-                        out.seek(offset)
-                        out.write(data[consumed:consumed+size]); consumed += size
-                    done += expected
-                    if progress:
-                        await progress(min(done, part['size']), part['size'])
-            digest = await asyncio.to_thread(hash_file, partial)
-            if digest != part['hash'].hex():
+                try:
+                    for i in range(min(workers,len(groups))):
+                        tasks[asyncio.create_task(prepare(groups[i]))] = i
+                    next_index = min(workers,len(groups))
+                    while tasks:
+                        ready,_ = await asyncio.wait(tasks,return_when=asyncio.FIRST_COMPLETED)
+                        for task in ready:
+                            index=tasks.pop(task); decoded=task.result()
+                            await thread_call(write_group,out,decoded)
+                            done+=groups[index]['expected']
+                            if progress:
+                                await progress(min(done,part['size']),part['size'])
+                            if next_index < len(groups):
+                                tasks[asyncio.create_task(prepare(groups[next_index]))] = next_index
+                                next_index+=1
+                            del decoded
+                finally:
+                    for task in tasks: task.cancel()
+                    await asyncio.gather(*tasks,return_exceptions=True)
+            extracted_at = time.monotonic()
+            checksums = await thread_call(file_checksums, partial)
+            if checksums['sha256'] != part['hash'].hex():
                 raise SourceError(f'{name}: SHA-256 ảnh cuối không khớp manifest; không upload ảnh lỗi.')
             partial.replace(path)
-            return {'path': str(path), 'name': name + '.img', 'size': part['size'], 'sha256': digest}
+            return {'path':str(path),'name':name+'.img','size':part['size'],**checksums,
+                    'metrics':{'extract_seconds':round(extracted_at-started,3),
+                               'verify_seconds':round(time.monotonic()-extracted_at,3),
+                               'range_requests':getattr(self.remote,'requests',0)-requests_before,
+                               'operations':len(part['ops']),'batches':len(groups),'workers':workers}}
         finally:
             partial.unlink(missing_ok=True)
+
+
+def operation_groups(part, block, base, end, batch_bytes):
+    groups, destinations = [], []
+    for op in part['ops']:
+        extents = [(start*block,count*block) for start,count in op['extents']]
+        if not extents or any(a < 0 or n <= 0 or a+n > part['size'] for a,n in extents):
+            raise SourceError('Extent vượt kích thước phân vùng.')
+        expected = sum(n for _,n in extents)
+        if expected > 64*1024**2 or op['length'] < 0 or op['length'] > 32*1024**2 or op['offset'] < 0 or base+op['offset']+op['length'] > end:
+            raise SourceError('Operation vượt giới hạn an toàn.')
+        zero = op['type'] in {6,7}
+        if not zero and not op['length']:
+            raise SourceError('Operation thiếu dữ liệu.')
+        destinations.extend((a,a+n) for a,n in extents)
+        item = {'op':op,'extents':extents,'expected':expected}
+        if (groups and not zero and groups[-1]['length']
+                and groups[-1]['offset']+groups[-1]['length'] == op['offset']
+                and groups[-1]['length']+op['length'] <= batch_bytes
+                and groups[-1]['expected']+expected <= 32*1024**2):
+            group=groups[-1]; group['ops'].append(item)
+            group['length']+=op['length']; group['expected']+=expected
+        else:
+            groups.append({'offset':op['offset'],'length':0 if zero else op['length'],
+                           'expected':expected,'ops':[item]})
+    previous_end=0
+    for start,finish in sorted(destinations):
+        if start < previous_end:
+            raise SourceError('Extents đích chồng lấn; không hỗ trợ xuất song song ROM này.')
+        previous_end=finish
+    return groups
+
+
+def decode_group(group, raw):
+    decoded=[]
+    for item in group['ops']:
+        op=item['op']; data=None
+        if op['type'] not in {6,7}:
+            start=op['offset']-group['offset']; blob=raw[start:start+op['length']]
+            if len(blob)!=op['length'] or (op['hash'] and hashlib.sha256(blob).digest()!=op['hash']):
+                raise SourceError('SHA-256 dữ liệu operation không khớp.')
+            data=decompress(blob,op['type'],item['expected'])
+        decoded.append((item['extents'],data))
+    return decoded
+
+
+def write_group(out, decoded):
+    for extents,data in decoded:
+        # Validated disjoint ZERO/DISCARD extents remain zero in the new sparse file.
+        if data is None: continue
+        consumed=0; view=memoryview(data)
+        for offset,size in extents:
+            out.seek(offset); out.write(view[consumed:consumed+size]); consumed+=size
 
 
 def decompress(raw, kind, expected):
@@ -162,3 +230,12 @@ def decompress(raw, kind, expected):
 def hash_file(path):
     with open(path, 'rb') as f:
         return hashlib.file_digest(f, 'sha256').hexdigest()
+
+
+
+def file_checksums(path):
+    sha, md5 = hashlib.sha256(), hashlib.md5()
+    with open(path,'rb') as f:
+        while chunk := f.read(1024**2):
+            sha.update(chunk); md5.update(chunk)
+    return {'sha256':sha.hexdigest(),'md5':md5.hexdigest()}

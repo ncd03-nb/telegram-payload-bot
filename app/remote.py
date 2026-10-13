@@ -13,17 +13,21 @@ from .rom import version_from_url, version_from_metadata
 
 
 class Remote:
-    def __init__(self, url):
+    def __init__(self, url, concurrency=8):
+        if not 1 <= concurrency <= 16:
+            raise ValueError('Invalid range concurrency')
         self.url = validate_url(url)
         self.size = None
         self.etag = None
         self.downloaded = 0
         self.session = None
         self.rom_version = version_from_url(url)
+        self.concurrency = concurrency
+        self.requests = 0
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(resolver=PublicResolver(), limit=4),
+            connector=aiohttp.TCPConnector(resolver=PublicResolver(), limit=self.concurrency),
             timeout=aiohttp.ClientTimeout(total=120, sock_connect=25, sock_read=60),
             auto_decompress=False, trust_env=False)
         try:
@@ -63,6 +67,7 @@ class Remote:
                                'User-Agent': 'PayloadPartitionBot/1.0'}
                     if self.etag and not self.etag.startswith('W/'):
                         headers['If-Range'] = self.etag
+                    self.requests += 1
                     async with self.session.get(current, headers=headers, allow_redirects=False) as r:
                         if r.status in {301, 302, 303, 307, 308}:
                             current = urljoin(current, r.headers.get('Location', ''))

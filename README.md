@@ -42,6 +42,14 @@ Google OAuth của ứng dụng External ở trạng thái Testing có thể h�
 - OPlus `downloadCheck` được xử lý bằng header của updater (`User-Agent: okhttp/3.12.12`, `userId: oplus-ota|16002018`), theo cách trong repo ROM hiện có. Chỉ gửi các header này đến host OTA OPlus được hỗ trợ, không gửi credential Google/GitHub tới CDN.
 - Kiểm tra hash không xác nhận chữ ký nhà sản xuất; bot xuất ảnh để tải về, không tự flash thiết bị.
 
+## Tốc độ trích xuất
+
+Runner mặc định tải trước 8 nhóm Range song song, gom các operation có dữ liệu liền nhau vào một request tối đa 8 MiB và giải nén bằng 2 luồng. Nhóm hoàn tất được ghi ngay vào đúng extents, không chờ một request chậm ở đầu hàng. Mỗi nhóm tối đa 32 MiB giải nén (operation đơn vẫn theo giới hạn 64 MiB); cửa sổ tải trước có giới hạn bộ nhớ. Full OTA có extents chồng lấn bị từ chối. ZERO/DISCARD giữ vùng sparse bằng zero trên file mới, không cần ghi lại hàng GB số 0.
+
+Kiểm tra SHA-256 từng operation và ảnh cuối vẫn bắt buộc. SHA-256 và MD5 cuối được tính trong một lượt đọc; upload tái sử dụng MD5 đã kiểm tra. Drive resumable dùng chunk 32 MiB, vẫn xác nhận offset khi mất phản hồi và đối chiếu checksum/kích thước trên Drive. ZIP64 vẫn dùng DEFLATE level 1 để cân bằng CPU và dung lượng upload. Tin tiến độ hiện dung lượng và tốc độ trung bình MiB/s, cập nhật 15 giây/lần.
+
+Có thể chỉnh Actions variables `EXTRACT_WORKERS` (1–16, mặc định 8), `RANGE_BATCH_MIB` (1–32, mặc định 8), `DECODE_WORKERS` (1–4, mặc định 2), `DRIVE_CHUNK_MIB` (1–64, mặc định 32). Số luồng cao hơn không đảm bảo nhanh hơn nếu CDN hoặc CPU giới hạn; đo lại trên cùng nguồn khi chỉnh. Script setup đồng bộ các biến này từ `.env`. Tác vụ đang chạy giữ bản mã đã checkout; tối ưu áp dụng cho tác vụ mới.
+
 ## Kiểm thử
 
 ```powershell

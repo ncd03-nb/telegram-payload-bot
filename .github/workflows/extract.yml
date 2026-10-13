@@ -63,6 +63,10 @@ jobs:
           PUBLIC_BOT: ${{ vars.PUBLIC_BOT || 'false' }}
           ALLOW_GROUPS: ${{ vars.ALLOW_GROUPS || 'false' }}
           PUBLIC_FILES: ${{ vars.PUBLIC_FILES || 'false' }}
+          EXTRACT_WORKERS: ${{ vars.EXTRACT_WORKERS || '8' }}
+          RANGE_BATCH_MIB: ${{ vars.RANGE_BATCH_MIB || '8' }}
+          DECODE_WORKERS: ${{ vars.DECODE_WORKERS || '2' }}
+          DRIVE_CHUNK_MIB: ${{ vars.DRIVE_CHUNK_MIB || '32' }}
         run: |
           docker run --rm --name payload-worker --stop-timeout 25 \
             -v "$RUNNER_TEMP/payload-config:/config" -v "$RUNNER_TEMP/payload-data:/data" \
@@ -70,6 +74,7 @@ jobs:
             -e TELEGRAM_BOT_TOKEN -e ALLOWED_USER_IDS -e GOOGLE_TOKEN_B64 \
             -e JOB_ID -e JOB_SOURCE_URL -e JOB_PARTITIONS -e JOB_OWNER -e JOB_CHAT -e JOB_MESSAGE_ID -e JOB_THREAD_ID -e JOB_REPLY_TO \
             -e PUBLIC_BOT -e ALLOW_GROUPS -e PUBLIC_FILES \
+            -e EXTRACT_WORKERS -e RANGE_BATCH_MIB -e DECODE_WORKERS -e DRIVE_CHUNK_MIB \
             -e RESULT_PATH=/result/result.json payload-worker python -m app.runner
       - name: Store verified result metadata
         if: always()

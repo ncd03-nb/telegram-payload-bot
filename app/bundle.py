@@ -1,21 +1,11 @@
 """Append verified images to a ZIP64 archive, removing each image after packing."""
-import asyncio
 import shutil
 import zipfile
 from pathlib import Path
 
-from .payload import hash_file
+from .payload import file_checksums
 from .security import SourceError
-
-
-async def thread_call(function, *args):
-    task = asyncio.create_task(asyncio.to_thread(function, *args))
-    try:
-        return await asyncio.shield(task)
-    except asyncio.CancelledError:
-        # Let the file operation finish before cleanup closes/removes its files.
-        await asyncio.gather(task, return_exceptions=True)
-        raise
+from .threads import thread_call
 
 
 class Bundle:
@@ -46,9 +36,9 @@ class Bundle:
         await thread_call(self.archive.close)
         self.archive = None
         self.partial.replace(self.path)
-        digest = await thread_call(hash_file, self.path)
+        checksums = await thread_call(file_checksums, self.path)
         return {'path':str(self.path),'name':self.path.name,'size':self.path.stat().st_size,
-                'sha256':digest,'members':self.members}
+                **checksums,'members':self.members}
 
     def __exit__(self, *args):
         if self.archive:

@@ -23,6 +23,25 @@ class Response:
 
 
 class UploadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_larger_chunks_reuse_verified_md5_and_preserve_upload_checks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data=b'A'*(16*1024**2)+b'B'*1024
+            path=Path(folder)/'boot.img'; path.write_bytes(data)
+            digest=hashlib.md5(data).hexdigest()
+            file={'path':str(path),'name':'boot.img','size':len(data),'sha256':'fixture','md5':digest}
+            class Session:
+                def __init__(self): self.sizes=[]
+                def post(self,*args,**kwargs): return Response(200,headers={'Location':'https://www.googleapis.com/upload/session'})
+                def put(self,url,**kwargs):
+                    self.sizes.append(len(kwargs['data']))
+                    return Response(308,headers={'Range':'bytes=0-16777215'}) if len(self.sizes)==1 else Response(200,obj={'id':'drive-id','size':str(len(data)),'md5Checksum':digest})
+            drive=Drive('unused',chunk_mib=16); drive.session=Session(); drive.token=AsyncMock(return_value='fixture')
+            drive.folder=AsyncMock(return_value='folder')
+            with patch('app.gdrive.hashlib.file_digest',side_effect=AssertionError('must reuse verified MD5')):
+                result=await drive.upload(file,'abcdef012345',1)
+            self.assertEqual(drive.session.sizes,[16*1024**2,1024])
+            self.assertEqual(result['id'],'drive-id')
+
     async def test_uncertain_chunk_commit_queries_offset_before_resending(self):
         with tempfile.TemporaryDirectory() as folder:
             data = b'A' * (8*1024**2) + b'B' * 1024
