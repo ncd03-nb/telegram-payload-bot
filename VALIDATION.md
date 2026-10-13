@@ -1,6 +1,6 @@
 # Kết quả kiểm thử — 13/10/2026 (GMT+7)
 
-Bot: **@pdoplus_bot**. Controller Docker `telegram-payload-bot-bot-1`, health HTTP 200, Google Drive riêng tư. Repo private: https://github.com/ncd03-nb/telegram-payload-bot.
+Bot: **@pdoplus_bot**. Controller Docker `telegram-payload-bot-bot-1`. Repo private: https://github.com/ncd03-nb/telegram-payload-bot. Các lượt thử ảnh riêng bên dưới chạy trước khi bật chế độ công khai; kết quả mới hiện chia sẻ anyone/reader.
 
 ## Hai nguồn ROM thật
 
@@ -32,3 +32,13 @@ Các ảnh đều được xác minh SHA-256 theo manifest sau trích xuất; sa
 - Secrets Telegram, Google OAuth và GitHub token nằm trong file riêng/Actions secrets; kiểm tra không có giá trị secret trong tập file được commit.
 
 Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-xiaomi-report.json`, `data/actions-oppo-report.json`, không commit. Ảnh kiểm thử trên Drive giữ lại cho người dùng tải; không tự xóa.
+
+## ZIP nhiều phân vùng và chế độ group công khai
+
+- Xiaomi `f3a3eba45fcf`: [Actions thành công](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38346181287), ZIP 20.958.944 byte.
+- OPPO `ec0d38d3c6cf`: [Actions thành công](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38346249067), ZIP 21.150.744 byte.
+- Mỗi tác vụ xuất `boot.img` và `init_boot.img` thành **một ZIP**, upload một file, gửi một thông báo kết quả/một nút tải. Cả hai `notified=true`, controller `done`.
+- Đã tải lại toàn bộ hai ZIP từ Drive, kiểm tra SHA-256 ZIP, kiểm tra danh sách file và SHA-256 của từng ảnh trong ZIP, tất cả đạt. Hai ZIP kiểm thử đã có quyền anyone/reader; API permissions xác nhận.
+- Bot API `getMe` xác nhận `can_join_groups=true`, `can_read_all_group_messages=true` sau khi người dùng tắt Privacy.
+- 25 tests đạt trên Windows Python 3.14 và Docker Linux Python 3.12. Tests bao gồm người dùng ngoài whitelist trong chế độ public, lệnh không có username trong supergroup, reply/topic, truyền owner/chat/thread vào Actions, từ chối đọc kết quả/hủy tác vụ của người khác, bỏ qua hội thoại/lệnh bot khác và chia sẻ file chỉ sau checksum đạt.
+- Kiểm thử group ở mức handler/API payload, chưa kiểm thử đầu-cuối trong group thật vì chưa có group được thêm bot trong phiên này. Báo cáo ZIP nằm trong `data/zip-xiaomi-report.json`, `data/zip-oppo-report.json`, không commit.

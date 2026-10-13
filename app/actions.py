@@ -38,7 +38,8 @@ class Actions:
             "ref": self.s.github_ref, "inputs": {
                 "job_id": job["id"], "source_url": job["url"],
                 "partitions": job["requested_name"], "owner": str(job["owner"]),
-                "chat": str(job["chat"]), "message_id": str(job["message_id"])}})
+                "chat": str(job["chat"]), "message_id": str(job["message_id"]),
+                "thread_id": str(job.get('thread_id') or 0)}})
 
 
     async def find_run(self, job):

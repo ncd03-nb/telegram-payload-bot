@@ -21,6 +21,9 @@ on:
       message_id:
         required: true
         type: string
+      thread_id:
+        default: '0'
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -52,12 +55,17 @@ jobs:
           JOB_OWNER: ${{ inputs.owner }}
           JOB_CHAT: ${{ inputs.chat }}
           JOB_MESSAGE_ID: ${{ inputs.message_id }}
+          JOB_THREAD_ID: ${{ inputs.thread_id }}
+          PUBLIC_BOT: ${{ vars.PUBLIC_BOT || 'false' }}
+          ALLOW_GROUPS: ${{ vars.ALLOW_GROUPS || 'false' }}
+          PUBLIC_FILES: ${{ vars.PUBLIC_FILES || 'false' }}
         run: |
           docker run --rm --name payload-worker --stop-timeout 25 \
             -v "$RUNNER_TEMP/payload-config:/config" -v "$RUNNER_TEMP/payload-data:/data" \
             -v "$RUNNER_TEMP/payload-result:/result" \
             -e TELEGRAM_BOT_TOKEN -e ALLOWED_USER_IDS -e GOOGLE_TOKEN_B64 \
-            -e JOB_ID -e JOB_SOURCE_URL -e JOB_PARTITIONS -e JOB_OWNER -e JOB_CHAT -e JOB_MESSAGE_ID \
+            -e JOB_ID -e JOB_SOURCE_URL -e JOB_PARTITIONS -e JOB_OWNER -e JOB_CHAT -e JOB_MESSAGE_ID -e JOB_THREAD_ID \
+            -e PUBLIC_BOT -e ALLOW_GROUPS -e PUBLIC_FILES \
             -e RESULT_PATH=/result/result.json payload-worker python -m app.runner
       - name: Store verified result metadata
         if: always()

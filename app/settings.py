@@ -16,6 +16,9 @@ class Settings:
     google_token: Path = Path('/config/google-token.json')
     port: int = 8080
     max_output: int = 40 * 1024**3
+    public: bool = False
+    groups: bool = False
+    public_files: bool = False
 
     @classmethod
     def load(cls):
@@ -27,8 +30,11 @@ class Settings:
             data_dir=Path(os.getenv('DATA_DIR', '/data')),
             google_token=Path(os.getenv('GOOGLE_TOKEN_PATH', '/config/google-token.json')),
             port=int(os.getenv('PORT', '8080')),
-            max_output=int(os.getenv('MAX_OUTPUT_GIB', '40')) * 1024**3)
-        if not re.fullmatch(r'\d+:[A-Za-z0-9_-]+', s.token) or not s.users:
+            max_output=int(os.getenv('MAX_OUTPUT_GIB', '40')) * 1024**3,
+            public=os.getenv('PUBLIC_BOT','false').lower() in {'1','true','yes'},
+            groups=os.getenv('ALLOW_GROUPS','false').lower() in {'1','true','yes'},
+            public_files=os.getenv('PUBLIC_FILES','false').lower() in {'1','true','yes'})
+        if not re.fullmatch(r'\d+:[A-Za-z0-9_-]+', s.token) or (not s.public and not s.users):
             raise ValueError('Thiếu token bot hoặc ALLOWED_USER_IDS.')
         if not re.fullmatch(r'[\w.-]+/[\w.-]+', s.github_repo) or not 0 < s.max_output <= 100 * 1024**3:
             raise ValueError('Repo hoặc giới hạn dung lượng không hợp lệ.')

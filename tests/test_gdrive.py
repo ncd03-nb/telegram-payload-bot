@@ -43,6 +43,7 @@ class UploadTests(unittest.IsolatedAsyncioTestCase):
                     return Response(200,obj=meta)
             drive=Drive('unused'); drive.session=Session()
             drive.token=AsyncMock(return_value='fixture'); drive.folder=AsyncMock(return_value='folder')
+            drive.api=AsyncMock()
             with patch('app.gdrive.asyncio.sleep',new=AsyncMock()):
                 uploaded=await drive.upload(result,'abcdef012345',1)
             puts=drive.session.puts
@@ -51,6 +52,20 @@ class UploadTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(puts[2]['data'],b'B'*1024)
             self.assertEqual(puts[2]['headers']['Content-Range'],f'bytes 8388608-{len(data)-1}/{len(data)}')
             self.assertEqual(uploaded['id'],'drive-id')
+            drive.api.assert_not_awaited()
+
+    async def test_public_upload_grants_anyone_reader_after_checksum_verification(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data=b'verified image'; path=Path(folder)/'boot.img'; path.write_bytes(data)
+            result={'path':str(path),'name':'boot.img','size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+            class Session:
+                def post(self,*args,**kwargs): return Response(200,headers={'Location':'https://www.googleapis.com/upload/session'})
+                def put(self,*args,**kwargs): return Response(200,obj={'id':'drive-id','size':str(len(data)),'md5Checksum':hashlib.md5(data).hexdigest()})
+            drive=Drive('unused'); drive.session=Session(); drive.token=AsyncMock(return_value='fixture')
+            drive.folder=AsyncMock(return_value='folder'); drive.api=AsyncMock()
+            await drive.upload(result,'abcdef012345',2,public=True)
+            drive.api.assert_awaited_once_with('POST','files/drive-id/permissions',
+                {'type':'anyone','role':'reader','allowFileDiscovery':False})
 
     async def test_remote_checksum_mismatch_rejects_completion(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -61,7 +76,9 @@ class UploadTests(unittest.IsolatedAsyncioTestCase):
                 def put(self,*args,**kwargs): return Response(200,obj={'id':'drive-id','size':str(result['size']),'md5Checksum':'wrong'})
             drive=Drive('unused'); drive.session=Session(); drive.token=AsyncMock(return_value='fixture')
             drive.folder=AsyncMock(return_value='folder')
-            with self.assertRaises(SourceError): await drive.upload(result,'abcdef012345',1)
+            drive.api=AsyncMock()
+            with self.assertRaises(SourceError): await drive.upload(result,'abcdef012345',1,public=True)
+            drive.api.assert_not_awaited()
 
     async def test_upload_location_cannot_forward_google_token_to_foreign_host(self):
         with tempfile.TemporaryDirectory() as folder:

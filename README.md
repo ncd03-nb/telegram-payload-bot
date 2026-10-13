@@ -9,9 +9,13 @@ Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên tron
 3. Gửi `/extract <mã ROM> boot,init_boot,vbmeta`, hoặc `/extract <link> boot`.
 4. Tin nhắn tiến độ được chỉnh sửa khoảng 15 giây/lần khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi gửi **một tin nhắn có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có tên file và dung lượng.
 
-`/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ. Chỉ Telegram user trong `ALLOWED_USER_IDS` được dùng, chỉ chat riêng.
+`/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ.
 
-Google Drive tạo thư mục `PayloadBot/<mã tác vụ>/`. File giữ **riêng tư**, không tự bật chia sẻ công khai; khi mở nút tải phải đăng nhập tài khoản Drive đã kết nối. Với ảnh lớn, Google có thể hiện trang xác nhận tải. Bot này không tự xóa ảnh theo lịch 12h của bot OneDrive.
+Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh/link trực tiếp trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, 3 lần đọc ROM/phút; tổng hàng đợi 20 tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
+
+Trong @BotFather, `/setprivacy` → chọn @pdoplus_bot → Disable. Nếu bot đã ở trong group trước khi đổi, xóa rồi thêm lại. Bot cần quyền gửi tin nhắn; không cần quyền quản trị. [Telegram group privacy](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get).
+
+Google Drive tạo thư mục `PayloadBot/<mã tác vụ>/`. `PUBLIC_FILES=true` chia sẻ **riêng file kết quả** với quyền “anyone with link / reader” sau khi upload và kiểm tra checksum; người khác không cần tài khoản Drive của chủ bot để tải. Với ảnh lớn, Google có thể hiện trang xác nhận tải. Bot này không tự xóa ảnh theo lịch 12h của bot OneDrive. Đặt `PUBLIC_BOT=false` để giới hạn theo `ALLOWED_USER_IDS`, `ALLOW_GROUPS=false` để chỉ nhận chat riêng, `PUBLIC_FILES=false` để giữ kết quả mới riêng tư. Thay đổi cờ không thu hồi quyền chia sẻ của file cũ.
 
 ## Docker và GitHub Actions
 
@@ -23,7 +27,7 @@ python scripts/google_login.py --client config/google-client.json
 docker compose up -d --build
 ```
 
-Host controller: `http://127.0.0.1:8082/health`. File OAuth `config/google-token.json`, `.env` và SQLite `data/jobs.sqlite3` là dữ liệu riêng, không commit. Script `scripts/setup_github.py` tạo repo riêng tư `ncd03-nb/telegram-payload-bot`, mã hóa và lưu ba Actions secrets `TELEGRAM_BOT_TOKEN`, `ALLOWED_USER_IDS`, `GOOGLE_TOKEN_B64`, và lưu dispatch token trong `.env`. Script cần PyNaCl (`pip install pynacl`) và quyền GitHub tạo repo/secrets; controller chỉ cần Actions read/write trên repo bot.
+Host controller: `http://127.0.0.1:8082/health`. File OAuth `config/google-token.json`, `.env` và SQLite `data/jobs.sqlite3` là dữ liệu riêng, không commit. Script `scripts/setup_github.py` tạo repo riêng tư `ncd03-nb/telegram-payload-bot`, mã hóa và lưu ba Actions secrets `TELEGRAM_BOT_TOKEN`, `ALLOWED_USER_IDS`, `GOOGLE_TOKEN_B64`, và lưu dispatch token trong `.env`. Script đồng bộ ba Actions variables `PUBLIC_BOT`, `ALLOW_GROUPS`, `PUBLIC_FILES` từ `.env`; chạy lại script khi đổi cờ để controller và runner có cùng cấu hình. Script cần PyNaCl (`pip install pynacl`) và quyền GitHub tạo repo/secrets; controller chỉ cần Actions read/write trên repo bot.
 
 Workflow `extract.yml` nhận URL và tên phân vùng qua JSON/env; không ghép input vào lệnh shell. Quyền workflow chỉ `contents: read`. File ảnh đi thẳng vào Drive, không lưu trong Actions artifacts. Artifact chỉ gồm metadata kết quả, tồn tại 2 ngày để controller phục hồi. Một tác vụ chạy ở một thời điểm trên controller; restart controller giữ runner đang chạy và đối chiếu theo mã duy nhất, không tự dispatch lại khi HTTP không rõ kết quả.
 

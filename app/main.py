@@ -24,8 +24,8 @@ Nhiều phân vùng → 1 ZIP, 1 nút tải. Một phân vùng → .img.
 /status [mã tác vụ]
 /cancel <mã tác vụ>
 /files <mã tác vụ> — lấy lại nút tải
-Chỉ nhận chat riêng của chủ bot. ROM full OTA được hỗ trợ; delta cần ảnh gốc sẽ bị từ chối.
-Ảnh lưu riêng tư trên Google Drive; đăng nhập tài khoản đã kết nối để tải.'''
+Nhận lệnh và link trực tiếp trong chat riêng/group, không cần @username.
+ROM full OTA được hỗ trợ; delta cần ảnh gốc sẽ bị từ chối.'''
 log = logging.getLogger('payloadbot')
 
 
@@ -38,6 +38,8 @@ class Bot:
             CREATE TABLE IF NOT EXISTS outputs(id TEXT PRIMARY KEY, owner INTEGER, files TEXT);''')
         self.tasks = []
         self.lock = None
+        self.username = ''
+        self.scan_times = {}
 
     async def start(self, app):
         if not self.s.github_token:
@@ -48,6 +50,8 @@ class Bot:
         self.store.recover()
         await self.tg.start(); await self.actions.start()
         try:
+            identity = await self.tg.call('getMe')
+            self.username = identity['username'].lower()
             await self.tg.call('deleteWebhook', drop_pending_updates=False)
             await self.tg.call('setMyCommands', commands=[
                 {'command':'start','description':'Hướng dẫn dùng bot'},
@@ -55,7 +59,7 @@ class Bot:
                 {'command':'extract','description':'Trích xuất .img sang Google Drive'},
                 {'command':'status','description':'Trạng thái tác vụ'},
                 {'command':'cancel','description':'Hủy tác vụ'},
-                {'command':'files','description':'Lấy lại nút tải .img'}])
+                {'command':'files','description':'Lấy lại nút tải ZIP/.img'}])
         except BaseException:
             await self.tg.close(); await self.actions.close()
             raise
@@ -74,16 +78,29 @@ class Bot:
             try:
                 for u in await self.tg.call('getUpdates', offset=offset, timeout=30, allowed_updates=['message']):
                     m = u.get('message', {})
-                    if m.get('from', {}).get('id') in self.s.users and m.get('chat', {}).get('type') == 'private':
+                    if self.accepts(m):
                         self.store.ingest(u)
                     offset = u['update_id'] + 1
             except Exception as e:
                 log.warning('Polling retry: %s', type(e).__name__)
                 await asyncio.sleep(5)
 
-    async def tell(self, chat, text):
-        try: return await self.tg.send(chat, text)
+    def accepts(self, message):
+        sender, chat = message.get('from', {}), message.get('chat', {})
+        owner = sender.get('id', 0)
+        if owner <= 0 or sender.get('is_bot') or (not self.s.public and owner not in self.s.users):
+            return False
+        if chat.get('type') == 'private':
+            return chat.get('id') == owner
+        return self.s.groups and chat.get('type') in {'group', 'supergroup'} and chat.get('id', 0) < 0
+
+    async def tell(self, chat, text, reply_to=None, thread_id=None):
+        try: return await self.tg.send(chat, text, reply_to=reply_to, thread_id=thread_id)
         except Exception: return None
+
+    async def reply(self, message, text):
+        return await self.tell(message['chat']['id'], text, reply_to=message.get('message_id'),
+            thread_id=message.get('message_thread_id'))
 
     async def updates(self):
         while True:
@@ -93,13 +110,20 @@ class Bot:
             try:
                 await self.handle(update)
             except (SourceError, ValueError) as e:
-                await self.tell(update['message']['chat']['id'], str(e))
+                await self.reply(update['message'], str(e))
             except Exception as e:
                 log.warning('Command failed: %s', type(e).__name__)
-                await self.tell(update['message']['chat']['id'], 'Lệnh thất bại; kiểm tra /status rồi thử lại.')
+                await self.reply(update['message'], 'Lệnh thất bại; kiểm tra /status rồi thử lại.')
             self.store.finish_update(update['update_id'])
 
     async def scan(self, owner, url):
+        now = time.monotonic()
+        recent = [t for t in self.scan_times.get(owner, []) if now-t < 60]
+        if len(recent) >= 3:
+            raise SourceError('Tối đa 3 lần đọc ROM mỗi phút cho mỗi người; đợi một chút rồi thử lại.')
+        if len(self.scan_times) >= 1024:
+            self.scan_times = {k:v for k,v in self.scan_times.items() if v and now-v[-1] < 60}
+        self.scan_times[owner] = recent + [now]
         async with asyncio.timeout(180):
             async with Remote(url) as remote:
                 payload = await Payload(remote).load()
@@ -112,19 +136,25 @@ class Bot:
 
     async def handle(self, update):
         m = update['message']; owner, chat = m['from']['id'], m['chat']['id']
+        if not self.accepts(m): return
+        async def respond(text):
+            return await self.reply(m, text)
         parts = m.get('text', '').strip().replace('https\\://', 'https://').split(maxsplit=1)
         if not parts: return
-        command, args = parts[0].split('@')[0].lower(), parts[1] if len(parts)>1 else ''
+        head = parts[0]
+        if head.startswith('/') and '@' in head and head.split('@', 1)[1].lower() != self.username:
+            return
+        command, args = head.split('@')[0].lower(), parts[1] if len(parts)>1 else ''
         if command in {'/start', '/help'}:
-            await self.tell(chat, HELP)
+            await respond(HELP + ('\nFile kết quả: ai có link đều có thể tải.' if self.s.public_files else '\nFile kết quả chỉ tải được bằng tài khoản Drive đã kết nối.'))
         elif command in {'/list', '/partitions'} or command.startswith(('https://', 'http://')):
             url = validate_url(args.strip() if command.startswith('/') else m['text'].strip().replace('https\\://','https://'))
-            await self.tell(chat, '🔎 Đang đọc danh sách phân vùng…')
+            await respond('🔎 Đang đọc danh sách phân vùng…')
             sid, rows = await self.scan(owner, url)
             listing = '\n'.join(f"{p['name']} — {p['size']/1024**2:.1f} MiB" + ('' if p['supported'] else ' [delta]') for p in rows)
-            await self.tell(chat, f'📦 ROM {sid} — {len(rows)} phân vùng\nDùng /extract {sid} boot,init_boot,vbmeta\nMã ROM có hiệu lực 24 giờ.')
+            await respond(f'📦 ROM {sid} — {len(rows)} phân vùng\nDùng /extract {sid} boot,init_boot,vbmeta\nMã ROM có hiệu lực 24 giờ.')
             for start in range(0, len(listing), 3800):
-                await self.tell(chat, listing[start:start+3800])
+                await respond(listing[start:start+3800])
         elif command == '/extract':
             values = args.split(maxsplit=1)
             if len(values) != 2:
@@ -142,16 +172,17 @@ class Bot:
                 raise SourceError('Tổng ảnh vượt MAX_OUTPUT_GIB, hãy chọn ít phân vùng hơn.')
             job = self.store.add(update['update_id'],owner,chat,url,','.join(chosen),backend='actions')
             if not job['message_id']:
-                self.store.change(job['id'],phase='creating_message')
-                sent = await self.tell(chat,'⏳ '+job['id']+' — Đang chờ GitHub Actions\nTiến độ: 0%')
+                self.store.change(job['id'],phase='creating_message',thread_id=m.get('message_thread_id',0))
+                sent = await respond('⏳ '+job['id']+' — Đang chờ GitHub Actions\nTiến độ: 0%')
                 self.store.change(job['id'], message_id=sent['message_id'] if sent else None,phase='queued')
         elif command == '/status':
             jobs = [self.store.get(args.strip(),owner)] if args else self.store.recent(owner)
-            await self.tell(chat, '\n\n'.join(f"{j['id']} — {j['state']}\n{j.get('phase') or ''}\n{j.get('error') or ''}" for j in jobs if j) or 'Chưa có tác vụ.')
+            await respond('\n\n'.join(f"{j['id']} — {j['state']}\n{j.get('phase') or ''}\n{j.get('error') or ''}" for j in jobs if j) or 'Chưa có tác vụ.')
         elif command in {'/files','/link','/dl'}:
             row = self.store.db.execute('SELECT files FROM outputs WHERE id=? AND owner=?',(args.strip(),owner)).fetchone()
             if not row: raise SourceError('Chưa có kết quả. Dùng /status để lấy mã tác vụ.')
-            for file in json.loads(row['files']): await send_file(self.tg,chat,file)
+            for file in json.loads(row['files']):
+                await send_file(self.tg,chat,file,reply_to=m.get('message_id'),thread_id=m.get('message_thread_id'))
         elif command == '/cancel':
             job = self.store.get(args.strip(),owner)
             if not job or job['state'] not in {'running','queued'}: raise SourceError('Không có tác vụ đang chạy thuộc bạn.')
@@ -160,9 +191,9 @@ class Bot:
                 if not run: raise SourceError('Runner chưa xuất hiện; đợi vài giây rồi hủy lại.')
                 await self.actions.cancel(run['id'])
             self.store.change(job['id'],state='cancelled',url='')
-            await self.tell(chat,'Đã yêu cầu hủy '+job['id']+'. File đã upload trước đó vẫn còn trên Drive.')
-        else:
-            await self.tell(chat, HELP)
+            await respond('Đã yêu cầu hủy '+job['id']+'. File đã upload trước đó vẫn còn trên Drive.')
+        elif m['chat']['type'] == 'private':
+            await respond(HELP)
 
     async def worker(self):
         while True:
@@ -171,7 +202,7 @@ class Bot:
                 await asyncio.sleep(1); continue
             try:
                 if not job['message_id']:
-                    sent = await self.tg.send(job['chat'],'⏳ '+job['id']+' — Đang chờ GitHub Actions')
+                    sent = await self.tg.send(job['chat'],'⏳ '+job['id']+' — Đang chờ GitHub Actions',thread_id=job.get('thread_id'))
                     self.store.change(job['id'],message_id=sent['message_id'])
                     job = self.store.get(job['id'],job['owner'])
                 if not job['dispatch_at']:
@@ -190,17 +221,19 @@ class Bot:
                         with self.store.db:
                             self.store.db.execute('INSERT OR REPLACE INTO outputs VALUES(?,?,?)',(job['id'],job['owner'],json.dumps(result['files'])))
                         if not result.get('notified'):
-                            for file in result['files']: await send_file(self.tg,job['chat'],file)
+                            for file in result['files']:
+                                await send_file(self.tg,job['chat'],file,reply_to=job['message_id'],thread_id=job.get('thread_id'))
                     self.store.change(job['id'],state=result['state'],completed=time.time(),url='',phase='completed',error=result.get('error',''))
-                    if result['state'] != 'done': await self.tell(job['chat'],'❌ '+job['id']+' — '+result.get('error','Workflow chưa hoàn tất.'))
+                    if result['state'] != 'done': await self.tell(job['chat'],'❌ '+job['id']+' — '+result.get('error','Workflow chưa hoàn tất.'),reply_to=job['message_id'],thread_id=job.get('thread_id'))
             except Exception as e:
                 error = str(e) if isinstance(e,SourceError) else 'Không đọc được kết quả Actions; kiểm tra workflow trước khi gửi lại.'
                 self.store.change(job['id'],state='failed',url='',error=error)
-                await self.tell(job['chat'],'❌ '+job['id']+' — '+error)
+                await self.tell(job['chat'],'❌ '+job['id']+' — '+error,reply_to=job['message_id'],thread_id=job.get('thread_id'))
 
     async def health(self, request):
         ok = all(not task.done() for task in self.tasks)
-        return web.json_response({'status':'ok' if ok else 'degraded','bot':'payload','storage':'gdrive'},status=200 if ok else 503)
+        return web.json_response({'status':'ok' if ok else 'degraded','bot':'payload','storage':'gdrive',
+            'public':self.s.public,'groups':self.s.groups,'public_files':self.s.public_files},status=200 if ok else 503)
 
 
 def main():

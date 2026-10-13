@@ -38,6 +38,12 @@ def main():
     for name,value in secrets.items():
         api('PUT','/repos/'+repo+'/actions/secrets/'+name,{'key_id':key['key_id'],'encrypted_value':base64.b64encode(box.encrypt(value.encode())).decode()})
         print('Configured secret:',name)
+    for name in ('PUBLIC_BOT','ALLOW_GROUPS','PUBLIC_FILES'):
+        value = 'true' if env.get(name,'false').lower() in {'true','1','yes'} else 'false'
+        path='/repos/'+repo+'/actions/variables'
+        exists=api('GET',path+'/'+name) is not None
+        api('PATCH' if exists else 'POST',path+'/'+name if exists else path,{'name':name,'value':value})
+        print('Configured variable:',name)
     values={'ACTIONS_DISPATCH_TOKEN':token,'ACTIONS_REPO':repo,'ACTIONS_REF':'main'}
     lines=[x for x in lines if x.split('=',1)[0] not in values]
     env_path.write_text('\n'.join(lines)+'\n'+'\n'.join(k+'='+v for k,v in values.items())+'\n',encoding='utf-8')

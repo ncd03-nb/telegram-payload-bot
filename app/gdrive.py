@@ -60,7 +60,7 @@ class Drive:
             body['parents'] = [await self.folder('root')]
         return (await self.api('POST', 'files', body, {'fields': 'id'}))['id']
 
-    async def upload(self, result, task_id, owner, progress=None):
+    async def upload(self, result, task_id, owner, progress=None, public=False):
         if not re.fullmatch(r'[a-f0-9]{12}', task_id):
             raise ValueError('Invalid task')
         path, total = Path(result['path']), result['size']
@@ -122,6 +122,9 @@ class Drive:
                     await asyncio.sleep(min(2**failures, 20))
         if int(uploaded.get('size', -1)) != total or uploaded.get('md5Checksum') != md5:
             raise SourceError('Checksum/kích thước ảnh trên Google Drive không khớp.')
+        if public:
+            await self.api('POST', 'files/'+uploaded['id']+'/permissions',
+                           {'type':'anyone','role':'reader','allowFileDiscovery':False})
         if progress:
             await progress(total, total)
         return {'id': uploaded['id'], 'name': result['name'], 'size': total, 'sha256': result['sha256'],
