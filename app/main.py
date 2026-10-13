@@ -172,7 +172,7 @@ class Bot:
                 raise SourceError('Tổng ảnh vượt MAX_OUTPUT_GIB, hãy chọn ít phân vùng hơn.')
             job = self.store.add(update['update_id'],owner,chat,url,','.join(chosen),backend='actions')
             if not job['message_id']:
-                self.store.change(job['id'],phase='creating_message',thread_id=m.get('message_thread_id',0))
+                self.store.change(job['id'],phase='creating_message',thread_id=m.get('message_thread_id',0),request_message_id=m.get('message_id',0))
                 sent = await respond('⏳ '+job['id']+' — Đang chờ GitHub Actions\nTiến độ: 0%')
                 self.store.change(job['id'], message_id=sent['message_id'] if sent else None,phase='queued')
         elif command == '/status':
@@ -202,7 +202,7 @@ class Bot:
                 await asyncio.sleep(1); continue
             try:
                 if not job['message_id']:
-                    sent = await self.tg.send(job['chat'],'⏳ '+job['id']+' — Đang chờ GitHub Actions',thread_id=job.get('thread_id'))
+                    sent = await self.tg.send(job['chat'],'⏳ '+job['id']+' — Đang chờ GitHub Actions',thread_id=job.get('thread_id'),reply_to=job.get('request_message_id'))
                     self.store.change(job['id'],message_id=sent['message_id'])
                     job = self.store.get(job['id'],job['owner'])
                 if not job['dispatch_at']:
@@ -222,13 +222,13 @@ class Bot:
                             self.store.db.execute('INSERT OR REPLACE INTO outputs VALUES(?,?,?)',(job['id'],job['owner'],json.dumps(result['files'])))
                         if not result.get('notified'):
                             for file in result['files']:
-                                await send_file(self.tg,job['chat'],file,reply_to=job['message_id'],thread_id=job.get('thread_id'))
+                                await send_file(self.tg,job['chat'],file,reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
                     self.store.change(job['id'],state=result['state'],completed=time.time(),url='',phase='completed',error=result.get('error',''))
-                    if result['state'] != 'done': await self.tell(job['chat'],'❌ '+job['id']+' — '+result.get('error','Workflow chưa hoàn tất.'),reply_to=job['message_id'],thread_id=job.get('thread_id'))
+                    if result['state'] != 'done': await self.tell(job['chat'],'❌ '+job['id']+' — '+result.get('error','Workflow chưa hoàn tất.'),reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
             except Exception as e:
                 error = str(e) if isinstance(e,SourceError) else 'Không đọc được kết quả Actions; kiểm tra workflow trước khi gửi lại.'
                 self.store.change(job['id'],state='failed',url='',error=error)
-                await self.tell(job['chat'],'❌ '+job['id']+' — '+error,reply_to=job['message_id'],thread_id=job.get('thread_id'))
+                await self.tell(job['chat'],'❌ '+job['id']+' — '+error,reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
 
     async def health(self, request):
         ok = all(not task.done() for task in self.tasks)

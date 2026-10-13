@@ -27,7 +27,7 @@ def selection(text, parts):
 
 async def send_file(telegram, chat, file, reply_to=None, thread_id=None):
     is_zip = file['name'].endswith('.zip')
-    detail = f"\n📦 {len(file['members'])} phân vùng" if file.get('members') else ''
+    detail = (f"\n📦 {len(file['members'])} phân vùng\n" + ', '.join(member['name'] for member in file['members'])) if file.get('members') else ''
     await telegram.send(chat, f"✅ Hoàn thành\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB" + detail,
         reply_markup={'inline_keyboard': [[{'text': '⬇ Tải ZIP từ Drive' if is_zip else '⬇ Tải .img từ Drive', 'url': file['url']}]]},
         **({'reply_to':reply_to} if reply_to else {}), **({'thread_id':thread_id} if thread_id else {}))
@@ -53,9 +53,9 @@ class Progress:
             await asyncio.sleep(15)
 
 
-def validate_identity(s, task_id, owner, chat, message, thread_id=0):
+def validate_identity(s, task_id, owner, chat, message, thread_id=0, reply_to=0):
     if (not re.fullmatch(r'[a-f0-9]{12}', task_id) or owner <= 0 or (not s.public and owner not in s.users)
-            or not chat or (chat != owner and not (s.groups and chat < 0)) or message <= 0 or thread_id < 0):
+            or not chat or (chat != owner and not (s.groups and chat < 0)) or message <= 0 or thread_id < 0 or reply_to < 0):
         raise ValueError('Invalid workflow identity')
 
 
@@ -64,7 +64,8 @@ async def run():
     task_id = os.environ['JOB_ID']
     owner, chat, message = (int(os.environ[k]) for k in ('JOB_OWNER', 'JOB_CHAT', 'JOB_MESSAGE_ID'))
     thread_id = int(os.getenv('JOB_THREAD_ID','0'))
-    validate_identity(s, task_id, owner, chat, message, thread_id)
+    reply_to = int(os.getenv('JOB_REPLY_TO','0'))
+    validate_identity(s, task_id, owner, chat, message, thread_id, reply_to)
     tg = Telegram(s.token); await tg.start()
     progress = Progress(tg, chat, message, task_id)
     ticker = asyncio.create_task(progress.loop())
@@ -120,7 +121,7 @@ async def run():
             await progress.render('❌ ' + task_id + ' — ' + result.get('error', 'Runner bị ngắt.'))
         try:
             for file in result['files']:
-                await send_file(tg, chat, file, reply_to=message, thread_id=thread_id)
+                await send_file(tg, chat, file, reply_to=reply_to or message, thread_id=thread_id)
             result['notified'] = True
         except Exception:
             pass

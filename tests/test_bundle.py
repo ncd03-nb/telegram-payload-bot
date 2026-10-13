@@ -42,8 +42,11 @@ class BundleTests(unittest.IsolatedAsyncioTestCase):
         telegram=type('Telegram',(),{'send':AsyncMock()})()
         record={'name':'payload-abcdef012345.zip','size':1024,'url':'https://drive.google.com/file',
                 'members':[{'name':'boot.img'},{'name':'init_boot.img'}]}
-        await send_file(telegram,1,record)
+        await send_file(telegram,1,record,reply_to=42,thread_id=5)
         telegram.send.assert_awaited_once()
         args=telegram.send.await_args
         self.assertIn('2 phân vùng',args.args[1])
+        self.assertIn('boot.img, init_boot.img',args.args[1])
+        self.assertEqual(args.kwargs['reply_to'],42)
+        self.assertEqual(args.kwargs['thread_id'],5)
         self.assertEqual(args.kwargs['reply_markup']['inline_keyboard'],[[{'text':'⬇ Tải ZIP từ Drive','url':record['url']}]])

@@ -50,10 +50,12 @@ class GroupTests(unittest.IsolatedAsyncioTestCase):
         await self.bot.handle({'update_id':15,'message':self.message('/extract https://example.com/rom.zip boot')})
         job=self.bot.store.recent(2)[0]
         self.assertEqual((job['owner'],job['chat'],job['thread_id'],job['message_id']),(2,-100123,5,900))
+        self.assertEqual(job['request_message_id'],12)
         self.bot.actions.request=AsyncMock(return_value={})
         await self.bot.actions.dispatch(job)
         inputs=self.bot.actions.request.await_args.args[2]['inputs']
         self.assertEqual((inputs['owner'],inputs['chat'],inputs['thread_id']),('2','-100123','5'))
+        self.assertEqual(inputs['reply_to'],'12')
         validate_identity(self.settings,job['id'],2,-100123,900,5)
 
     async def test_result_and_cancel_remain_scoped_to_requesting_user(self):

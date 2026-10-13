@@ -26,6 +26,7 @@ class Store:
             "backend": "TEXT DEFAULT 'local'", "message_id": "INTEGER",
             "run_id": "INTEGER", "dispatch_at": "REAL", "phase": "TEXT DEFAULT ''",
             "thread_id": "INTEGER DEFAULT 0",
+            "request_message_id": "INTEGER DEFAULT 0",
         }.items():
             if name not in columns:
                 self.db.execute(f"ALTER TABLE jobs ADD COLUMN {name} {declaration}")
@@ -82,7 +83,7 @@ class Store:
     def change(self, job_id, **fields):
         if not set(fields).issubset({"state", "bytes", "total", "destination", "error", "url",
                 "completed", "expires", "file_id", "etag", "file_url", "retention", "cleanup_error", "manifest", "links_error",
-                "backend", "message_id", "run_id", "dispatch_at", "phase", "thread_id"}):
+                "backend", "message_id", "run_id", "dispatch_at", "phase", "thread_id", "request_message_id"}):
             raise ValueError("Invalid job fields")
         with self.db:
             self.db.execute("UPDATE jobs SET " + ",".join(k + "=?" for k in fields) + " WHERE id=?", (*fields.values(), job_id))
