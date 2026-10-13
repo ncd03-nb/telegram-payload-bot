@@ -13,7 +13,7 @@ from .security import SourceError
 
 class Drive:
     def __init__(self, token_path, chunk_mib=8):
-        if not 1 <= chunk_mib <= 64:
+        if not 1 <= chunk_mib <= 256:
             raise ValueError('Invalid Drive chunk size')
         self.path = Path(token_path)
         self.access, self.expiry = '', 0

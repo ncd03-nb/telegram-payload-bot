@@ -51,7 +51,7 @@ class Settings:
         if not 0 <= s.max_concurrent <= 20:
             raise ValueError('MAX_CONCURRENT_JOBS phải nằm trong khoảng 0–20; 0 là không giới hạn chạy song song tại bot.')
         if not (1 <= s.extract_workers <= 16 and 1 <= s.range_batch_mib <= 32
-                and 1 <= s.decode_workers <= 4 and 1 <= s.drive_chunk_mib <= 64):
+                and 1 <= s.decode_workers <= 4 and 1 <= s.drive_chunk_mib <= 256):
             raise ValueError('Cấu hình pipeline trích xuất/upload không hợp lệ.')
         s.data_dir.mkdir(parents=True, exist_ok=True)
         if os.getenv('GOOGLE_TOKEN_B64') and not s.google_token.exists():

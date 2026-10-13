@@ -40,7 +40,7 @@ def main():
         print('Configured secret:',name)
     variables={name:('true' if env.get(name,'false').lower() in {'true','1','yes'} else 'false')
                for name in ('PUBLIC_BOT','ALLOW_GROUPS','PUBLIC_FILES')}
-    for name,default,limit in (('EXTRACT_WORKERS',8,16),('RANGE_BATCH_MIB',8,32),('DECODE_WORKERS',2,4),('DRIVE_CHUNK_MIB',32,64)):
+    for name,default,limit in (('EXTRACT_WORKERS',8,16),('RANGE_BATCH_MIB',8,32),('DECODE_WORKERS',2,4),('DRIVE_CHUNK_MIB',32,256)):
         value=int(env.get(name,str(default)))
         if not 1 <= value <= limit: raise SystemExit('Invalid '+name)
         variables[name]=str(value)
