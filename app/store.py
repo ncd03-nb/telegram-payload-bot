@@ -71,11 +71,13 @@ class Store:
                             (job_id, update_id, owner, chat, url, requested_name, time.time(), backend))
         return self.get(job_id, owner)
 
-    def claim(self):
-        existing = self.db.execute("SELECT * FROM jobs WHERE state='running' AND backend='actions' ORDER BY created LIMIT 1").fetchone()
+    def claim(self, exclude=()):
+        excluded = tuple(exclude)
+        skip = ' AND id NOT IN (' + ','.join('?' for _ in excluded) + ')' if excluded else ''
+        existing = self.db.execute("SELECT * FROM jobs WHERE state='running' AND backend='actions'" + skip + " ORDER BY created LIMIT 1", excluded).fetchone()
         if existing:
             return dict(existing)
-        row = self.db.execute("SELECT * FROM jobs WHERE state='queued' AND phase!='creating_message' ORDER BY created LIMIT 1").fetchone()
+        row = self.db.execute("SELECT * FROM jobs WHERE state='queued' AND phase!='creating_message'" + skip + " ORDER BY created LIMIT 1", excluded).fetchone()
         if row:
             self.change(row["id"], state="running")
             return dict(self.db.execute("SELECT * FROM jobs WHERE id=?", (row["id"],)).fetchone())

@@ -19,6 +19,7 @@ class Settings:
     public: bool = False
     groups: bool = False
     public_files: bool = False
+    max_concurrent: int = 0
 
     @classmethod
     def load(cls):
@@ -33,11 +34,14 @@ class Settings:
             max_output=int(os.getenv('MAX_OUTPUT_GIB', '40')) * 1024**3,
             public=os.getenv('PUBLIC_BOT','false').lower() in {'1','true','yes'},
             groups=os.getenv('ALLOW_GROUPS','false').lower() in {'1','true','yes'},
-            public_files=os.getenv('PUBLIC_FILES','false').lower() in {'1','true','yes'})
+            public_files=os.getenv('PUBLIC_FILES','false').lower() in {'1','true','yes'},
+            max_concurrent=int(os.getenv('MAX_CONCURRENT_JOBS','0')))
         if not re.fullmatch(r'\d+:[A-Za-z0-9_-]+', s.token) or (not s.public and not s.users):
             raise ValueError('Thiếu token bot hoặc ALLOWED_USER_IDS.')
         if not re.fullmatch(r'[\w.-]+/[\w.-]+', s.github_repo) or not 0 < s.max_output <= 100 * 1024**3:
             raise ValueError('Repo hoặc giới hạn dung lượng không hợp lệ.')
+        if not 0 <= s.max_concurrent <= 20:
+            raise ValueError('MAX_CONCURRENT_JOBS phải nằm trong khoảng 0–20; 0 là không giới hạn chạy song song tại bot.')
         s.data_dir.mkdir(parents=True, exist_ok=True)
         if os.getenv('GOOGLE_TOKEN_B64') and not s.google_token.exists():
             s.google_token.parent.mkdir(parents=True, exist_ok=True)

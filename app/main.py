@@ -40,6 +40,7 @@ class Bot:
         self.lock = None
         self.username = ''
         self.scan_times = {}
+        self.job_tasks = {}
 
     async def start(self, app):
         if not self.s.github_token:
@@ -173,7 +174,7 @@ class Bot:
             job = self.store.add(update['update_id'],owner,chat,url,','.join(chosen),backend='actions')
             if not job['message_id']:
                 self.store.change(job['id'],phase='creating_message',thread_id=m.get('message_thread_id',0),request_message_id=m.get('message_id',0))
-                sent = await respond('⏳ '+job['id']+' — Đang chờ GitHub Actions\nTiến độ: 0%')
+                sent = await respond('⏳ '+job['id']+' — Chờ lượt xử lý trong bot\nTiến độ: 0%')
                 self.store.change(job['id'], message_id=sent['message_id'] if sent else None,phase='queued')
         elif command == '/status':
             jobs = [self.store.get(args.strip(),owner)] if args else self.store.recent(owner)
@@ -196,44 +197,67 @@ class Bot:
             await respond(HELP)
 
     async def worker(self):
-        while True:
-            job = self.store.claim()
-            if not job:
-                await asyncio.sleep(1); continue
-            try:
-                if not job['message_id']:
-                    sent = await self.tg.send(job['chat'],'⏳ '+job['id']+' — Đang chờ GitHub Actions',thread_id=job.get('thread_id'),reply_to=job.get('request_message_id'))
-                    self.store.change(job['id'],message_id=sent['message_id'])
-                    job = self.store.get(job['id'],job['owner'])
-                if not job['dispatch_at']:
-                    self.store.change(job['id'],dispatch_at=time.time(),phase='dispatching')
-                    try:
-                        response = await self.actions.dispatch(job)
-                        if response.get('workflow_run_id'): self.store.change(job['id'],run_id=response['workflow_run_id'])
-                    except (aiohttp.ClientError, asyncio.TimeoutError):
-                        pass
-                    # Never retry ambiguous dispatch: reconcile the unique run-name.
-                    self.store.change(job['id'],url='')
-                result = await self.actions.observe(self.store.get(job['id'],job['owner']),self.store)
-                if result:
-                    if result.get('files'):
-                        if result.get('owner') != job['owner']: raise SourceError('Kết quả không khớp chủ tác vụ.')
-                        with self.store.db:
-                            self.store.db.execute('INSERT OR REPLACE INTO outputs VALUES(?,?,?)',(job['id'],job['owner'],json.dumps(result['files'])))
-                        if not result.get('notified'):
-                            for file in result['files']:
-                                await send_file(self.tg,job['chat'],file,reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
-                    self.store.change(job['id'],state=result['state'],completed=time.time(),url='',phase='completed',error=result.get('error',''))
-                    if result['state'] != 'done': await self.tell(job['chat'],'❌ '+job['id']+' — '+result.get('error','Workflow chưa hoàn tất.'),reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
-            except Exception as e:
-                error = str(e) if isinstance(e,SourceError) else 'Không đọc được kết quả Actions; kiểm tra workflow trước khi gửi lại.'
-                self.store.change(job['id'],state='failed',url='',error=error)
-                await self.tell(job['chat'],'❌ '+job['id']+' — '+error,reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
+        try:
+            while True:
+                for jid, task in list(self.job_tasks.items()):
+                    if task.done():
+                        if not task.cancelled() and task.exception():
+                            log.warning('Job task ended: %s', type(task.exception()).__name__)
+                        del self.job_tasks[jid]
+                while not self.s.max_concurrent or len(self.job_tasks) < self.s.max_concurrent:
+                    job = self.store.claim(exclude=self.job_tasks)
+                    if not job:
+                        break
+                    self.job_tasks[job['id']] = asyncio.create_task(self.process_job(job))
+                await asyncio.sleep(.5)
+        finally:
+            for task in self.job_tasks.values(): task.cancel()
+            await asyncio.gather(*self.job_tasks.values(), return_exceptions=True)
+            self.job_tasks.clear()
+
+    async def process_job(self, job):
+        try:
+            job = self.store.get(job['id'],job['owner'])
+            if job['state'] != 'running': return
+            if not job['message_id']:
+                sent = await self.tg.send(job['chat'],'⏳ '+job['id']+' — Chuẩn bị gửi GitHub Actions',thread_id=job.get('thread_id'),reply_to=job.get('request_message_id'))
+                self.store.change(job['id'],message_id=sent['message_id'])
+                job = self.store.get(job['id'],job['owner'])
+                if job['state'] != 'running': return
+            if not job['dispatch_at']:
+                self.store.change(job['id'],dispatch_at=time.time(),phase='dispatching')
+                try:
+                    response = await self.actions.dispatch(job)
+                    if response.get('workflow_run_id'): self.store.change(job['id'],run_id=response['workflow_run_id'])
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    pass
+                # Never retry ambiguous dispatch: reconcile the unique run-name.
+                self.store.change(job['id'],url='')
+                try:
+                    await self.tg.edit(job['chat'],job['message_id'],'⏳ '+job['id']+' — Đã gửi GitHub Actions; chờ cấp runner\nTiến độ: 0%')
+                except Exception:
+                    pass
+            result = await self.actions.observe(self.store.get(job['id'],job['owner']),self.store)
+            if result:
+                if result.get('files'):
+                    if result.get('owner') != job['owner']: raise SourceError('Kết quả không khớp chủ tác vụ.')
+                    with self.store.db:
+                        self.store.db.execute('INSERT OR REPLACE INTO outputs VALUES(?,?,?)',(job['id'],job['owner'],json.dumps(result['files'])))
+                    if not result.get('notified'):
+                        for file in result['files']:
+                            await send_file(self.tg,job['chat'],file,reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
+                self.store.change(job['id'],state=result['state'],completed=time.time(),url='',phase='completed',error=result.get('error',''))
+                if result['state'] != 'done': await self.tell(job['chat'],'❌ '+job['id']+' — '+result.get('error','Workflow chưa hoàn tất.'),reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
+        except Exception as e:
+            error = str(e) if isinstance(e,SourceError) else 'Không đọc được kết quả Actions; kiểm tra workflow trước khi gửi lại.'
+            self.store.change(job['id'],state='failed',url='',error=error)
+            await self.tell(job['chat'],'❌ '+job['id']+' — '+error,reply_to=job.get('request_message_id') or job['message_id'],thread_id=job.get('thread_id'))
 
     async def health(self, request):
         ok = all(not task.done() for task in self.tasks)
         return web.json_response({'status':'ok' if ok else 'degraded','bot':'payload','storage':'gdrive',
-            'public':self.s.public,'groups':self.s.groups,'public_files':self.s.public_files},status=200 if ok else 503)
+            'public':self.s.public,'groups':self.s.groups,'public_files':self.s.public_files,
+            'max_concurrent':self.s.max_concurrent,'active_jobs':len(self.job_tasks)},status=200 if ok else 503)
 
 
 def main():

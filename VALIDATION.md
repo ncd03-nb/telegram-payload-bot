@@ -49,3 +49,9 @@ Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-
 - Đọc lại directory và metadata của hai URL thật: Xiaomi hiển thị `OS4.0.24.0.XEOCNXM` từ tên ZIP; mã build nội bộ trong metadata không thay thế phiên bản này. Chỉ đọc khoảng 67 KiB, không tải lại phân vùng.
 - Với URL OPPO mẫu, tên ZIP là hash, nội dung metadata không phải văn bản đọc được; kết quả hiển thị “Không xác định”. Không suy đoán phiên bản từ hash/token URL. Với metadata target build dạng văn bản hoặc tên gói có phiên bản OPlus, bot tự nhận diện.
 - 32 tests đạt trên Windows; thêm tests metadata stored/deflate, CRC lỗi, metadata quá lớn, bỏ qua query URL, phân biệt target/pre-build, ưu tiên phiên bản dễ đọc hơn mã build nội bộ và định dạng kết quả giữ reply/topic/tên phân vùng.
+
+## Chạy song song
+
+- Nguyên nhân job `66a2cf055bf5` chờ: controller cũ chỉ có một worker, đang observe `b1d47d5fa9de`; job mới chưa được dispatch (không có run ID/dispatch timestamp).
+- Controller hiện có scheduler với observer riêng từng tác vụ, `MAX_CONCURRENT_JOBS=0` bỏ trần chạy song song tại bot. Giới hạn tiếp nhận vẫn giữ như README; giới hạn runner của GitHub áp dụng cho cả tài khoản.
+- 35 tests đạt trên Windows: 6 tác vụ cùng được observe trong khi job đầu chưa hoàn tất; job đã dispatch được resume, không gửi trùng; cấu hình giới hạn tùy chọn trả slot cho job tiếp theo; shutdown hủy observers nhưng giữ trạng thái để phục hồi; job đã hủy không được dispatch.
