@@ -100,3 +100,9 @@ Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-
 - Giữ nguyên cả 9 file của 8 tác vụ người dùng; xác minh lại IDs qua Drive API sau khi dọn. File benchmark đã tự xóa ở các lần đo trước không nằm trong số 13 file này.
 - Xóa 59 file trên máy, tổng 218.429.513 byte: ảnh IMG thử, báo cáo tạm, metadata mẫu, URL thử và cache Python; chỉ gỡ các thư mục đã rỗng trong workspace. Báo cáo chi tiết trước đây được đề cập trong tài liệu đã được dọn; kết quả xác minh tổng hợp/SHA-256 vẫn giữ ở tài liệu này.
 - Giữ `.env`, Google client/OAuth, SQLite đang dùng, mã nguồn và toàn bộ tests. Giữ một báo cáo dọn duy nhất ở `data/cleanup-report.json` (không commit). Docker đã khởi động lại; bot health HTTP 200, không còn tác vụ đang chạy khi dọn.
+
+## Chỉ xử lý lệnh bắt đầu bằng /
+
+- Loại bỏ hành vi tự scan khi người dùng gửi URL thường. Poller chỉ lưu tin nhắn bắt đầu bằng `/`; handler cũng bỏ qua link/nội dung hội thoại để không xử lý các update cũ đã lưu. Áp dụng cho chat riêng, group và supergroup.
+- `/list <link>`, `/partitions <link>` và `/extract <link hoặc mã ROM> <phân vùng>` vẫn hoạt động; lệnh không cần thêm username, lệnh nhắm bot khác vẫn bị bỏ qua. Cập nhật `/help` và README theo hành vi mới.
+- Regression tests kiểm tra link Facebook, ZIP OTA và payload.bin không gây scan, trả lời hoặc tạo job trong cả chat riêng/group; kiểm tra `/list@pdoplus_bot` vẫn scan và giữ reply/topic. 50 tests đạt trên Windows Python 3.14 và Docker Python 3.12. Mã `21fdcd8` đã đẩy lên GitHub, bot Docker đã cập nhật, health HTTP 200.
