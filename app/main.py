@@ -17,14 +17,14 @@ from .store import Store
 from .telegram import Telegram
 
 HELP = '''🤖 Payload → IMG → Google Drive
-Gửi link ZIP OTA/payload.bin hoặc /list <link> để xem phân vùng.
+/list <link ZIP OTA/payload.bin> — xem phân vùng.
 Nhiều phân vùng → 1 ZIP, 1 nút tải. Một phân vùng → .img.
 /extract <mã ROM hoặc link> boot,init_boot,vbmeta
 /extract <mã ROM> all — xuất mọi phân vùng (tối đa 40 GiB)
 /status [mã tác vụ]
 /cancel <mã tác vụ>
 /files <mã tác vụ> — lấy lại nút tải
-Nhận lệnh và link trực tiếp trong chat riêng/group, không cần @username.
+Chỉ nhận lệnh bắt đầu bằng / trong chat riêng/group, không cần @username.
 ROM full OTA được hỗ trợ; delta cần ảnh gốc sẽ bị từ chối.'''
 log = logging.getLogger('payloadbot')
 
@@ -79,7 +79,7 @@ class Bot:
             try:
                 for u in await self.tg.call('getUpdates', offset=offset, timeout=30, allowed_updates=['message']):
                     m = u.get('message', {})
-                    if self.accepts(m):
+                    if self.accepts(m) and m.get('text', '').lstrip().startswith('/'):
                         self.store.ingest(u)
                     offset = u['update_id'] + 1
             except Exception as e:
@@ -143,13 +143,15 @@ class Bot:
         parts = m.get('text', '').strip().replace('https\\://', 'https://').split(maxsplit=1)
         if not parts: return
         head = parts[0]
-        if head.startswith('/') and '@' in head and head.split('@', 1)[1].lower() != self.username:
+        if not head.startswith('/'):
+            return
+        if '@' in head and head.split('@', 1)[1].lower() != self.username:
             return
         command, args = head.split('@')[0].lower(), parts[1] if len(parts)>1 else ''
         if command in {'/start', '/help'}:
             await respond(HELP + ('\nFile kết quả: ai có link đều có thể tải.' if self.s.public_files else '\nFile kết quả chỉ tải được bằng tài khoản Drive đã kết nối.'))
-        elif command in {'/list', '/partitions'} or command.startswith(('https://', 'http://')):
-            url = validate_url(args.strip() if command.startswith('/') else m['text'].strip().replace('https\\://','https://'))
+        elif command in {'/list', '/partitions'}:
+            url = validate_url(args.strip())
             await respond('🔎 Đang đọc danh sách phân vùng…')
             sid, rows = await self.scan(owner, url)
             listing = '\n'.join(f"{p['name']} — {p['size']/1024**2:.1f} MiB" + ('' if p['supported'] else ' [delta]') for p in rows)

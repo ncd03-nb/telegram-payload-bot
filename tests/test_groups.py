@@ -58,6 +58,27 @@ class GroupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(inputs['reply_to'],'12')
         validate_identity(self.settings,job['id'],2,-100123,900,5)
 
+    async def test_bare_links_in_private_and_group_do_not_scan_or_reply(self):
+        self.bot.scan=AsyncMock(side_effect=AssertionError('bare links must not access ROM sources'))
+        for chat in ({'id':-100123,'type':'supergroup'},{'id':2,'type':'private'}):
+            for text in ('https://www.facebook.com/share/p/fixture/',
+                         'https://example.com/rom.zip', 'http://example.com/payload.bin',
+                         '  https://example.com/rom.zip boot',
+                         'Xem link https://example.com/rom.zip',
+                         'extract https://example.com/rom.zip boot'):
+                m=self.message(text); m['chat']=chat
+                await self.bot.handle({'update_id':19,'message':m})
+        self.bot.scan.assert_not_awaited()
+        self.bot.tg.send.assert_not_awaited()
+        self.assertEqual(self.bot.store.recent(2),[])
+
+    async def test_explicit_list_command_still_scans_and_replies(self):
+        self.bot.scan=AsyncMock(return_value=('rom',[{'name':'boot','supported':True,'size':8}]))
+        await self.bot.handle({'update_id':20,'message':self.message('/list@pdoplus_bot https://example.com/rom.zip')})
+        self.bot.scan.assert_awaited_once_with(2,'https://example.com/rom.zip')
+        self.assertEqual(self.bot.tg.send.await_count,3)
+        self.assertTrue(all(c.kwargs=={'reply_to':12,'thread_id':5} for c in self.bot.tg.send.await_args_list))
+
     async def test_result_and_cancel_remain_scoped_to_requesting_user(self):
         file={'name':'boot.img','size':8,'url':'https://drive.google.com/file'}
         with self.bot.store.db:

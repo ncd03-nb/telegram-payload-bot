@@ -5,13 +5,13 @@ Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên tron
 ## Sử dụng
 
 1. Mở bot và gửi `/start`.
-2. Gửi link ROM, hoặc `/list <link>`. Bot trả mã ROM và danh sách phân vùng/dung lượng.
+2. Gửi `/list <link ROM>`. Bot trả mã ROM và danh sách phân vùng/dung lượng. Link không kèm lệnh được bỏ qua.
 3. Gửi `/extract <mã ROM> boot,init_boot,vbmeta`, hoặc `/extract <link> boot`.
 4. Tin nhắn tiến độ được chỉnh sửa khoảng 15 giây/lần khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi gửi **một tin nhắn có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có phiên bản ROM, tên file, dung lượng và tên các ảnh trong ZIP. Phiên bản lấy từ metadata target build trong ZIP OTA (tối đa 64 KiB), hoặc tên/đường dẫn URL gốc và URL CDN sau redirect; không đọc query token. Nếu thiếu thông tin, hiển thị “Không xác định”; nếu chỉ có mã build, hiển thị “Build <mã>”. `/files` giữ lại phiên bản của kết quả mới. Cả tiến độ và kết quả reply trực tiếp tin nhắn yêu cầu của người dùng, giữ đúng topic trong group.
 
 `/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ.
 
-Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh/link trực tiếp trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, 3 lần đọc ROM/phút; tổng hàng đợi 20 tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
+Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh bắt đầu bằng `/` trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua link không kèm lệnh, lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, 3 lần đọc ROM/phút; tổng hàng đợi 20 tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
 
 Trong @BotFather, `/setprivacy` → chọn @pdoplus_bot → Disable. Nếu bot đã ở trong group trước khi đổi, xóa rồi thêm lại. Bot cần quyền gửi tin nhắn; không cần quyền quản trị. [Telegram group privacy](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get).
 
