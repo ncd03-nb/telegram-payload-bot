@@ -1,0 +1,34 @@
+# Kết quả kiểm thử — 13/10/2026 (GMT+7)
+
+Bot: **@pdoplus_bot**. Controller Docker `telegram-payload-bot-bot-1`, health HTTP 200, Google Drive riêng tư. Repo private: https://github.com/ncd03-nb/telegram-payload-bot.
+
+## Hai nguồn ROM thật
+
+| Nguồn | ZIP OTA | Phân vùng trong manifest | Byte tải để xuất 3 ảnh | Runner gồm build/upload |
+|---|---:|---:|---:|---:|
+| Xiaomi OS4.0.24.0.XEOCNXM madrid | 12.465.321.399 | 66 | 14.935.421 | 38 giây |
+| OPPO downloadCheck do người dùng cung cấp | 10.088.874.007 | 67 | 15.134.289 | 46 giây |
+
+Chỉ xuất **vbmeta, init_boot, boot** ở lần thử này, không tuyên bố đã trích xuất toàn bộ 66/67 phân vùng. Những con số thời gian là kết quả của hai tác vụ cụ thể, không đảm bảo tốc độ cho ROM/phân vùng khác. OPPO cần header updater để nhận redirect sang CDN, sau đó đọc Range/ZIP64 bình thường.
+
+Các ảnh đều được xác minh SHA-256 theo manifest sau trích xuất; sau upload kiểm tra dung lượng và MD5 do Google Drive trả. Metadata Drive được đọc lại cho cả 6 ảnh, ảnh không được chia sẻ `anyone`. Đã tải lại toàn bộ `vbmeta.img` của mỗi hãng qua Drive API và kiểm tra SHA-256. Chưa tải lại toàn bộ boot/init_boot từ Drive; kiểm tra sau upload cho chúng dựa trên dung lượng và MD5 từ Drive.
+
+| Nguồn | Ảnh | Byte | SHA-256 |
+|---|---|---:|---|
+| Xiaomi | vbmeta.img | 12.288 | `7ecd568785b5a7a79aea078dfe6d8c8e3666d56b8e8d77ed90cfe491d67d2999` |
+| Xiaomi | init_boot.img | 8.388.608 | `f75ff54ab0d7cc39d8d6ceb1f957489d47dfe302dafd1c1a2a06ad66aa7b437d` |
+| Xiaomi | boot.img | 100.663.296 | `2ad437afb0c5edbcbb9430066313d75883c39f4853ddc0541ff7e5eeb32bb92a` |
+| OPPO | vbmeta.img | 8.192 | `d184b4fd02b78407d538e1a9b751ad559092bd52b5214b8044b6c6c81579a8bb` |
+| OPPO | init_boot.img | 8.388.608 | `146fcd9f56f6a7367d3bdfda5d25e9437adf71c12e319b6d747d75c01ca9e0d4` |
+| OPPO | boot.img | 100.663.296 | `89972fd025861ec52e596ab28ecd4a1e11dfa55bd8d32c928437b36b1f1c47f9` |
+
+## Actions và Telegram
+
+- Xiaomi job `adc9016ca0d4`: [workflow thành công](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38345711510), 11:17:20–11:17:58 GMT+7.
+- OPPO job `6e998c982bdc`: [workflow thành công](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/38345779399), 11:18:11–11:18:57 GMT+7.
+- Cả hai runner xác nhận gửi thông báo kết quả vào Telegram. Controller đã nhận artifact và chuyển cả hai job sang `done`.
+- `/files 6e998c982bdc` đã thử qua handler và gửi lại 3 nút tải thành công.
+- 15 tests đạt trên Windows Python 3.14 và Docker Linux Python 3.12; CI commit `1bbbe77` thành công. Docker build đạt.
+- Secrets Telegram, Google OAuth và GitHub token nằm trong file riêng/Actions secrets; kiểm tra không có giá trị secret trong tập file được commit.
+
+Kết quả thực tế chứa Drive IDs/URL riêng và nằm ở `data/actions-xiaomi-report.json`, `data/actions-oppo-report.json`, không commit. Ảnh kiểm thử trên Drive giữ lại cho người dùng tải; không tự xóa.
