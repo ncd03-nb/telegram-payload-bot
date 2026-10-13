@@ -33,7 +33,7 @@ class Remote:
         try:
             parsed = urlsplit(self.url)
             if parsed.path.rstrip('/').endswith('/downloadCheck'):
-                if not (parsed.hostname or '').endswith(('.allawnos.com', '.coloros.com', '.oplusota.com')):
+                if not (parsed.hostname or '').endswith(('.allawnos.com', '.allawntech.com', '.coloros.com', '.oplusota.com')):
                     raise SourceError('Host downloadCheck chưa được hỗ trợ.')
                 async with self.session.get(self.url, allow_redirects=False, headers={
                     'User-Agent': 'okhttp/3.12.12', 'Accept': '*/*', 'Accept-Encoding': 'identity',
