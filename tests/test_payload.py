@@ -126,6 +126,45 @@ class PayloadTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RangeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_oplus_mislabeled_utf8_ranges_extract_verified_image(self):
+        data, image = fixture(8)
+        for encoding in ('UTF-8', 'utf8', 'Identity'):
+            async def handler(request):
+                start, end = map(int, request.headers['Range'][6:].split('-'))
+                return web.Response(body=data[start:end+1], status=206, headers={
+                    'Content-Range':f'bytes {start}-{end}/{len(data)}',
+                    'Content-Encoding':encoding})
+            app=web.Application(); app.router.add_get('/',handler)
+            async with TestServer(app) as server:
+                remote=Remote('https://example.com/file'); remote.url=str(server.make_url('/'))
+                async with aiohttp.ClientSession(auto_decompress=False) as session:
+                    remote.session=session
+                    with patch('app.remote.validate_url',side_effect=lambda x:x):
+                        await remote.read(0,32)
+                        payload=await Payload(remote).load()
+                        with tempfile.TemporaryDirectory() as folder:
+                            result=await payload.extract('boot',folder)
+                            self.assertEqual(Path(result['path']).read_bytes(),image)
+                            self.assertEqual(result['sha256'],hashlib.sha256(image).hexdigest())
+
+    async def test_encoded_or_invalid_utf8_ranges_remain_rejected(self):
+        for encoding,content_range,body in (
+            ('gzip','bytes 0-31/100',bytes(32)),
+            ('UTF-8',None,bytes(32)),
+            ('UTF-8','bytes 1-32/100',bytes(32)),
+            ('UTF-8','bytes 0-31/100',bytes(33))):
+            async def handler(request):
+                headers={'Content-Encoding':encoding}
+                if content_range: headers['Content-Range']=content_range
+                return web.Response(body=body,status=206,headers=headers)
+            app=web.Application(); app.router.add_get('/',handler)
+            async with TestServer(app) as server:
+                remote=Remote('https://example.com/file'); remote.url=str(server.make_url('/'))
+                async with aiohttp.ClientSession(auto_decompress=False) as session:
+                    remote.session=session
+                    with patch('app.remote.validate_url',side_effect=lambda x:x):
+                        with self.assertRaises(SourceError): await remote.read(0,32)
+
     async def test_wrong_content_range_and_ignored_range_rejected(self):
         for status,content_range in ((200,None),(206,'bytes 1-32/100')):
             async def handler(request):

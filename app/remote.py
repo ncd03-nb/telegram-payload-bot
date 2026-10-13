@@ -75,8 +75,16 @@ class Remote:
                         if r.status in {429, 500, 502, 503, 504}:
                             raise aiohttp.ClientConnectionError('Retry range')
                         match = re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)', r.headers.get('Content-Range', ''))
-                        if r.status != 206 or not match or r.headers.get('Content-Encoding', 'identity') != 'identity':
+                        if r.status != 206:
                             raise SourceError(f'Nguồn trả HTTP {r.status}, cần hỗ trợ HTTP Range (206).')
+                        if not match:
+                            raise SourceError('Nguồn trả HTTP 206 nhưng Content-Range thiếu hoặc không hợp lệ.')
+                        # Some OPlus AliyunOSS objects label raw ZIP bytes as UTF-8.
+                        # This is a charset, not a content coding. Keep decompression
+                        # disabled and enforce the exact range length and image hashes.
+                        encoding = r.headers.get('Content-Encoding', 'identity').strip().lower()
+                        if encoding not in {'identity', 'utf-8', 'utf8'}:
+                            raise SourceError('Nguồn trả dữ liệu mã hóa/nén HTTP; cần Range trên byte gốc.')
                         start, end, total = map(int, match.groups())
                         if start != offset or end != offset + length - 1 or total < offset + length or total > 100 * 1024**3:
                             raise SourceError('Content-Range không khớp vùng yêu cầu.')
