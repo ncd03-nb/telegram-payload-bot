@@ -8,6 +8,9 @@ on:
       part_mib:
         type: string
         default: '32'
+      size_mib:
+        type: string
+        default: '512'
 permissions:
   contents: read
 concurrency:
@@ -31,6 +34,7 @@ jobs:
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
           BENCHMARK_WORKERS: ${{ inputs.workers }}
           BENCHMARK_PART_MIB: ${{ inputs.part_mib }}
+          BENCHMARK_SMALL_MIB: ${{ inputs.size_mib }}
           RESULT_PATH: ${{ runner.temp }}/archive-parallel.json
         run: python -u scripts/benchmark_archive_parallel.py
       - uses: actions/upload-artifact@v4

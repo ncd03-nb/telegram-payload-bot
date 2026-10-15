@@ -19,14 +19,15 @@ async def main():
     workers_list=[int(x) for x in os.getenv('BENCHMARK_WORKERS','4,8').split(',')]
     part_mib=int(os.getenv('BENCHMARK_PART_MIB','32'))
     repeat_mib=int(os.getenv('BENCHMARK_REPEAT_MIB','2048'))
-    if not 1<=len(workers_list)<=3 or any(not 1<=n<=16 or n*part_mib>256 for n in workers_list) or not 5<=part_mib<=64 or not 1024<=repeat_mib<=4096:
+    small_mib=int(os.getenv('BENCHMARK_SMALL_MIB','512'))
+    if not 1<=len(workers_list)<=2 or any(not 1<=n<=16 or n*part_mib>256 for n in workers_list) or not 5<=part_mib<=64 or not 512<=small_mib<=4096 or not 1024<=repeat_mib<=4096:
         raise ValueError('Invalid benchmark bounds')
     output=Path(os.environ['RESULT_PATH']);output.parent.mkdir(parents=True,exist_ok=True)
     def save():output.write_text(json.dumps(report,indent=2))
     pending=[]
     try:
         with tempfile.TemporaryDirectory() as folder:
-            file=await asyncio.to_thread(sample,Path(folder)/'multipart-test-512m.bin',512)
+            file=await asyncio.to_thread(sample,Path(folder)/('multipart-test-'+str(small_mib)+'m.bin'),small_mib)
             for workers in workers_list:
                 row=await measure(file,workers,part_mib,report,save);pending.append((file,row))
             rows=[r for r in report['samples'] if r.get('parts_mib_s',0)>=18]

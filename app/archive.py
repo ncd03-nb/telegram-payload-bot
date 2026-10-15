@@ -5,7 +5,7 @@ import hashlib
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import quote, urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -45,6 +45,7 @@ class Archive:
             raise ValueError('Invalid Archive credentials')
         self.auth = 'LOW '+access+':'+secret
         self.workers, self.part_bytes = workers, part_mib*1024**2
+        self.routes={};self.redirects=0
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=240,connect=30,sock_read=180),
@@ -56,17 +57,24 @@ class Archive:
         await self.session.close()
 
     async def request(self, method, url, data=None, headers=None):
+        original=urlsplit(safe_url(url));route_key=urlunsplit(original._replace(query='',fragment=''))
+        if route_key in self.routes:
+            target=urlsplit(self.routes[route_key]);url=urlunsplit(target._replace(query=original.query))
         for _ in range(5):
             safe_url(url)
             async with self.session.request(method,url,data=data,allow_redirects=False,
+                    expect100=method=='PUT' and isinstance(data,bytes) and len(data)>=5*1024**2,
                     headers={'Authorization':self.auth,**(headers or {})}) as r:
                 if r.status in (307,308):
-                    url=safe_url(urljoin(url,r.headers.get('Location','')));continue
+                    url=safe_url(urljoin(url,r.headers.get('Location','')));self.redirects+=1;continue
                 raw=await r.content.read(1048577)
                 if len(raw)>1048576:raise ArchiveError('Oversized IAS3 response')
                 if r.status not in (200,201,204):raise ArchiveError('IAS3 HTTP '+str(r.status))
                 if raw.lstrip().startswith(b'<') and xml_value(raw,'Code'):
                     raise ArchiveError('IAS3 reported an XML error')
+                target=urlsplit(url)
+                if original.path==target.path and original.query==target.query:
+                    self.routes[route_key]=urlunsplit(target._replace(query='',fragment=''))
                 return raw
         raise ArchiveError('IAS3 redirect limit')
 
@@ -119,7 +127,7 @@ class Archive:
                     'parts':count,'part_mib':self.part_bytes//1024**2,'workers':self.workers,
                     'init_seconds':round(initiated-started,3),'parts_seconds':round(parts_finished-initiated,3),
                     'parts_mib_s':round(size/1024**2/max(.001,parts_finished-initiated),2),
-                    'commit_seconds':round(time.monotonic()-parts_finished,3)}
+                    'commit_seconds':round(time.monotonic()-parts_finished,3),'redirects':self.redirects}
         finally:
             if not committed:
                 try:

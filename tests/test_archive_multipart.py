@@ -6,9 +6,27 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from app.archive import Archive,ArchiveError,completion,safe_url
+from unittest.mock import AsyncMock
 
 
 class MultipartTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reuses_validated_archive_redirect_and_expect_continue(self):
+        class Response:
+            def __init__(self,status,location=None):
+                self.status=status;self.headers={'Location':location} if location else {}
+                self.content=type('Content',(),{'read':AsyncMock(return_value=b'')})()
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):pass
+        calls=[];responses=iter([Response(307,'https://ia800001.us.archive.org/item/file?uploads'),Response(200),Response(200)])
+        class Session:
+            def request(self,method,url,**kwargs):calls.append((method,url,kwargs));return next(responses)
+        client=Archive('access','secret');client.session=Session()
+        await client.request('POST','https://s3.us.archive.org/item/file?uploads')
+        await client.request('PUT','https://s3.us.archive.org/item/file?partNumber=1&uploadId=fixture',b'a'*(5*1024**2))
+        self.assertEqual(calls[-1][1],'https://ia800001.us.archive.org/item/file?partNumber=1&uploadId=fixture')
+        self.assertTrue(calls[-1][2]['expect100'])
+        self.assertEqual(client.redirects,1)
+
     async def test_missing_part_etags_use_quoted_md5_in_sorted_completion(self):
         seen=[]
         class Fake(Archive):
