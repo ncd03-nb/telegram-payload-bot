@@ -50,3 +50,14 @@ class BundleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args.kwargs['reply_to'],42)
         self.assertEqual(args.kwargs['thread_id'],5)
         self.assertEqual(args.kwargs['reply_markup']['inline_keyboard'],[[{'text':'⬇ Tải ZIP từ Drive','url':record['url']}]])
+
+    async def test_runner_edits_progress_instead_of_sending_another_result(self):
+        telegram=type('Telegram',(),{'send':AsyncMock(),'edit':AsyncMock()})()
+        record={'name':'boot.img','size':1024,'url':'https://drive.google.com/file','rom_version':'OS3.test'}
+        await send_file(telegram,1,record,message_id=42)
+        telegram.send.assert_not_awaited()
+        telegram.edit.assert_awaited_once()
+        args=telegram.edit.await_args
+        self.assertEqual(args.args[:2],(1,42))
+        self.assertIn('boot.img',args.args[2])
+        self.assertEqual(args.kwargs['reply_markup']['inline_keyboard'][0][0]['url'],record['url'])

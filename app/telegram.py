@@ -38,6 +38,7 @@ class Telegram:
             **({'reply_parameters': {'message_id': reply_to, 'allow_sending_without_reply': True}} if reply_to else {}),
             **({'message_thread_id': thread_id} if thread_id else {}))
 
-    async def edit(self, chat, message_id, text):
+    async def edit(self, chat, message_id, text, reply_markup=None):
         return await self.call("editMessageText", chat_id=chat, message_id=message_id,
-            text=text[:4000], link_preview_options={"is_disabled": True})
+            text=text[:4000], link_preview_options={"is_disabled": True},
+            **({'reply_markup': reply_markup} if reply_markup is not None else {}))

@@ -27,13 +27,17 @@ def selection(text, parts):
     return names
 
 
-async def send_file(telegram, chat, file, reply_to=None, thread_id=None):
+async def send_file(telegram, chat, file, reply_to=None, thread_id=None, message_id=None):
     is_zip = file['name'].endswith('.zip')
     detail = (f"\n📦 {len(file['members'])} phân vùng\n" + ', '.join(member['name'] for member in file['members'])) if file.get('members') else ''
     version = file.get('rom_version') or 'Không xác định'
-    await telegram.send(chat, f"✅ Hoàn thành\n📱 ROM: {version}\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB" + detail,
-        reply_markup={'inline_keyboard': [[{'text': '⬇ Tải ZIP từ Drive' if is_zip else '⬇ Tải .img từ Drive', 'url': file['url']}]]},
-        **({'reply_to':reply_to} if reply_to else {}), **({'thread_id':thread_id} if thread_id else {}))
+    text = f"✅ Hoàn thành\n📱 ROM: {version}\n📄 {file['name']}\n💾 {file['size']/1024**2:.2f} MiB" + detail
+    markup = {'inline_keyboard': [[{'text': '⬇ Tải ZIP từ Drive' if is_zip else '⬇ Tải .img từ Drive', 'url': file['url']}]]}
+    if message_id:
+        await telegram.edit(chat, message_id, text, reply_markup=markup)
+    else:
+        await telegram.send(chat, text, reply_markup=markup,
+            **({'reply_to':reply_to} if reply_to else {}), **({'thread_id':thread_id} if thread_id else {}))
 
 
 class Progress:
@@ -145,7 +149,7 @@ async def run():
             await progress.render('❌ ' + task_id + ' — ' + result.get('error', 'Runner bị ngắt.'))
         try:
             for file in result['files']:
-                await send_file(tg, chat, file, reply_to=reply_to or message, thread_id=thread_id)
+                await send_file(tg, chat, file, message_id=message)
             result['notified'] = True
         except Exception:
             pass
