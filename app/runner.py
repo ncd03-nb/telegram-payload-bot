@@ -15,6 +15,7 @@ from .security import SourceError
 from .settings import Settings
 from .telegram import Telegram
 from .bundle import Bundle
+from .exchange import load_job_env, write_result
 
 
 def selection(text, parts):
@@ -41,11 +42,16 @@ class Progress:
         self.phase, self.name, self.percent = 'Đọc payload', '', 0
         self.started = time.monotonic()
         self.detail = ''
+        self.last_signature = None
+        self.last_render = 0
 
     async def render(self, final=None):
+        signature=(round(self.percent,1),self.phase,self.name,self.detail,final)
+        if signature==self.last_signature and time.monotonic()-self.last_render<10:return
         text = final or f"⚙️ {self.id} — {self.phase}\n📄 {self.name}\nTiến độ: {self.percent:.1f}%\nThời gian: {int(time.monotonic()-self.started)} giây" + ('\n'+self.detail if self.detail else '')
         try:
             await self.tg.edit(self.chat, self.message, text)
+            self.last_signature=signature;self.last_render=time.monotonic()
         except Exception:
             pass
         print(f'Progress {self.percent:.1f}% | {self.phase}', flush=True)
@@ -53,7 +59,7 @@ class Progress:
     async def loop(self):
         while True:
             await self.render()
-            await asyncio.sleep(15)
+            await asyncio.sleep(2)
 
 
 def validate_identity(s, task_id, owner, chat, message, thread_id=0, reply_to=0):
@@ -63,6 +69,7 @@ def validate_identity(s, task_id, owner, chat, message, thread_id=0, reply_to=0)
 
 
 async def run():
+    load_job_env()
     s = Settings.load()
     task_id = os.environ['JOB_ID']
     owner, chat, message = (int(os.environ[k]) for k in ('JOB_OWNER', 'JOB_CHAT', 'JOB_MESSAGE_ID'))
@@ -144,7 +151,7 @@ async def run():
             pass
         output = Path(os.getenv('RESULT_PATH', str(s.data_dir / 'result.json')))
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(result), encoding='utf-8')
+        write_result(output,result,s.token)
         # Directory is fixed by validated task ID, never by source filename.
         if directory.exists():
             for file in directory.iterdir():

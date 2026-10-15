@@ -54,8 +54,10 @@ class GroupTests(unittest.IsolatedAsyncioTestCase):
         self.bot.actions.request=AsyncMock(return_value={})
         await self.bot.actions.dispatch(job)
         inputs=self.bot.actions.request.await_args.args[2]['inputs']
-        self.assertEqual((inputs['owner'],inputs['chat'],inputs['thread_id']),('2','-100123','5'))
-        self.assertEqual(inputs['reply_to'],'12')
+        from app.exchange import unseal
+        decoded=unseal(self.settings.token,inputs['job_payload'],job['id'])
+        self.assertEqual((decoded['owner'],decoded['chat'],decoded['thread_id']),(2,-100123,5))
+        self.assertEqual(decoded['request_message_id'],12)
         validate_identity(self.settings,job['id'],2,-100123,900,5)
 
     async def test_bare_links_in_private_and_group_do_not_scan_or_reply(self):

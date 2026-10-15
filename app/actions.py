@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import aiohttp
 
 from .security import SourceError
+from .exchange import seal,unseal
 
 
 class Actions:
@@ -39,11 +40,7 @@ class Actions:
         # Inputs go through JSON, never interpolation into shell commands.
         return await self.request("POST", "/actions/workflows/extract.yml/dispatches", {
             "ref": self.s.github_ref, "inputs": {
-                "job_id": job["id"], "source_url": job["url"],
-                "partitions": job["requested_name"], "owner": str(job["owner"]),
-                "chat": str(job["chat"]), "message_id": str(job["message_id"]),
-                "thread_id": str(job.get('thread_id') or 0),
-                "reply_to": str(job.get('request_message_id') or 0)}})
+                "job_id": job["id"], "job_payload":seal(self.s.token,{**job,'partitions':job['requested_name']},job['id'])}})
 
 
     async def find_run(self, job):
@@ -73,7 +70,8 @@ class Actions:
             raw = await read_limited(r.content, 131072)
             if r.status != 200 or len(raw) > 131072:
                 raise SourceError("Artifact kết quả không hợp lệ.")
-        return decode_result(raw, job_id)
+        result=decode_result(raw,job_id)
+        return unseal(self.s.token,result['sealed'],job_id) if result.get('sealed') else result
 
     async def observe(self, job, store):
         while True:
@@ -116,9 +114,10 @@ async def read_limited(stream, limit):
 def decode_result(raw, job_id):
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         entry = archive.getinfo("result.json")
-        if entry.file_size > 65536:
+        if entry.file_size > 180000:
             raise SourceError("Kết quả Actions vượt kích thước cho phép.")
         obj = json.loads(archive.read(entry))
+    if not obj.get('sealed') and entry.file_size>65536:raise SourceError('Kết quả Actions vượt kích thước cho phép.')
     if not isinstance(obj, dict) or obj.get("id") != job_id or obj.get("state") not in {"done", "failed", "cancelled"}:
         raise SourceError("Kết quả Actions không khớp tác vụ.")
     return obj

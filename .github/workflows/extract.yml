@@ -7,19 +7,22 @@ on:
         required: true
         type: string
       source_url:
-        required: true
+        default: ''
+        type: string
+      job_payload:
+        default: ''
         type: string
       partitions:
-        required: true
+        default: ''
         type: string
       owner:
-        required: true
+        default: '0'
         type: string
       chat:
-        required: true
+        default: '0'
         type: string
       message_id:
-        required: true
+        default: '0'
         type: string
       thread_id:
         default: '0'
@@ -55,6 +58,7 @@ jobs:
           ALLOWED_USER_IDS: ${{ secrets.ALLOWED_USER_IDS }}
           GOOGLE_TOKEN_B64: ${{ secrets.GOOGLE_TOKEN_B64 }}
           JOB_ID: ${{ inputs.job_id }}
+          JOB_PAYLOAD: ${{ inputs.job_payload }}
           JOB_SOURCE_URL: ${{ inputs.source_url }}
           JOB_PARTITIONS: ${{ inputs.partitions }}
           JOB_OWNER: ${{ inputs.owner }}
@@ -74,7 +78,7 @@ jobs:
             -v "$RUNNER_TEMP/payload-config:/config" -v "$RUNNER_TEMP/payload-data:/data" \
             -v "$RUNNER_TEMP/payload-result:/result" \
             -e TELEGRAM_BOT_TOKEN -e ALLOWED_USER_IDS -e GOOGLE_TOKEN_B64 \
-            -e JOB_ID -e JOB_SOURCE_URL -e JOB_PARTITIONS -e JOB_OWNER -e JOB_CHAT -e JOB_MESSAGE_ID -e JOB_THREAD_ID -e JOB_REPLY_TO \
+            -e JOB_ID -e JOB_PAYLOAD -e JOB_SOURCE_URL -e JOB_PARTITIONS -e JOB_OWNER -e JOB_CHAT -e JOB_MESSAGE_ID -e JOB_THREAD_ID -e JOB_REPLY_TO \
             -e PUBLIC_BOT -e ALLOW_GROUPS -e PUBLIC_FILES -e HUB_URL -e HUB_BOT_ID \
             -e EXTRACT_WORKERS -e RANGE_BATCH_MIB -e DECODE_WORKERS -e DRIVE_CHUNK_MIB \
             -e RESULT_PATH=/result/result.json payload-worker python -m app.runner
@@ -93,4 +97,5 @@ jobs:
           HUB_BOT_ID: payload
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           JOB_ID: ${{ inputs.job_id }}
+          RESULT_PATH: ${{ runner.temp }}/payload-result/result.json
         run: python scripts/notify_controller.py
