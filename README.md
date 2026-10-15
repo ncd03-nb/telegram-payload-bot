@@ -1,23 +1,25 @@
 # Telegram Payload Bot
 
-Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên trong ZIP OTA, trích xuất các phân vùng được chọn thành `.img`, kiểm tra SHA-256 theo manifest rồi upload vào Google Drive. Controller chạy Docker; tác vụ nặng chạy GitHub Actions.
+Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên trong ZIP OTA, trích xuất các phân vùng được chọn thành `.img`, kiểm tra SHA-256 theo manifest rồi upload vào Google Drive. Controller chạy hoàn toàn trên Cloudflare; đọc metadata, trích xuất và upload chạy trên GitHub Actions. Repo hiện là public; inputs/artifacts tác vụ được mã hóa AES-256-GCM. Xem [hướng dẫn controller Cloudflare](https://github.com/ncd03-nb/telegram-onedrive-bot/blob/main/docs/cloudflare-controller.md). Docker/Render cũ đã dừng.
 
 ## Sử dụng
 
 1. Mở bot và gửi `/start`.
 2. Gửi `/list <link ROM>`. Bot trả mã ROM và danh sách phân vùng/dung lượng. Link không kèm lệnh được bỏ qua.
 3. Gửi `/extract <mã ROM> boot,init_boot,vbmeta`, hoặc `/extract <link> boot`.
-4. Tin nhắn tiến độ được chỉnh sửa khoảng 15 giây/lần khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi gửi **một tin nhắn có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có phiên bản ROM, tên file, dung lượng và tên các ảnh trong ZIP. Phiên bản lấy từ metadata target build trong ZIP OTA (tối đa 64 KiB), hoặc tên/đường dẫn URL gốc và URL CDN sau redirect; không đọc query token. Nếu thiếu thông tin, hiển thị “Không xác định”; nếu chỉ có mã build, hiển thị “Build <mã>”. `/files` giữ lại phiên bản của kết quả mới. Cả tiến độ và kết quả reply trực tiếp tin nhắn yêu cầu của người dùng, giữ đúng topic trong group.
+4. Tin nhắn tiến độ được chỉnh sửa khoảng 2 giây/lần khi tiến độ thay đổi sau khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi gửi **một tin nhắn có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có phiên bản ROM, tên file, dung lượng và tên các ảnh trong ZIP. Phiên bản lấy từ metadata target build trong ZIP OTA (tối đa 64 KiB), hoặc tên/đường dẫn URL gốc và URL CDN sau redirect; không đọc query token. Nếu thiếu thông tin, hiển thị “Không xác định”; nếu chỉ có mã build, hiển thị “Build <mã>”. `/files` giữ lại phiên bản của kết quả mới. Cả tiến độ và kết quả reply trực tiếp tin nhắn yêu cầu của người dùng, giữ đúng topic trong group.
 
 `/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ.
 
-Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh bắt đầu bằng `/` trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua link không kèm lệnh, lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, 3 lần đọc ROM/phút; tổng hàng đợi 20 tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
+Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh bắt đầu bằng `/` trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua link không kèm lệnh, lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, các tác vụ được kiểm tra theo chủ tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
 
 Trong @BotFather, `/setprivacy` → chọn @pdoplus_bot → Disable. Nếu bot đã ở trong group trước khi đổi, xóa rồi thêm lại. Bot cần quyền gửi tin nhắn; không cần quyền quản trị. [Telegram group privacy](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get).
 
 Google Drive tạo thư mục `PayloadBot/<mã tác vụ>/`. `PUBLIC_FILES=true` chia sẻ **riêng file kết quả** với quyền “anyone with link / reader” sau khi upload và kiểm tra checksum; người khác không cần tài khoản Drive của chủ bot để tải. Với ảnh lớn, Google có thể hiện trang xác nhận tải. Bot này không tự xóa ảnh theo lịch 12h của bot OneDrive. Đặt `PUBLIC_BOT=false` để giới hạn theo `ALLOWED_USER_IDS`, `ALLOW_GROUPS=false` để chỉ nhận chat riêng, `PUBLIC_FILES=false` để giữ kết quả mới riêng tư. Thay đổi cờ không thu hồi quyền chia sẻ của file cũ.
 
-## Docker và GitHub Actions
+## Cấu hình Docker cũ và GitHub Actions
+
+Phần Docker dưới đây dành cho môi trường thử/cấu hình OAuth. Host production đã chuyển sang Cloudflare; không cần giữ máy bật. Quyền truy cập controller được đặt trong secret `BOTS_CONFIG`; các biến quyền của Actions cần được đồng bộ khi đổi cấu hình.
 
 ```powershell
 Copy-Item .env.example .env
@@ -46,7 +48,7 @@ Google OAuth của ứng dụng External ở trạng thái Testing có thể h�
 
 Runner mặc định tải trước 8 nhóm Range song song, gom các operation có dữ liệu liền nhau vào một request tối đa 8 MiB và giải nén bằng 2 luồng. Nhóm hoàn tất được ghi ngay vào đúng extents, không chờ một request chậm ở đầu hàng. Mỗi nhóm tối đa 32 MiB giải nén (operation đơn vẫn theo giới hạn 64 MiB); cửa sổ tải trước có giới hạn bộ nhớ. Full OTA có extents chồng lấn bị từ chối. ZERO/DISCARD giữ vùng sparse bằng zero trên file mới, không cần ghi lại hàng GB số 0.
 
-Kiểm tra SHA-256 từng operation và ảnh cuối vẫn bắt buộc. SHA-256 và MD5 cuối được tính trong một lượt đọc; upload tái sử dụng MD5 đã kiểm tra. Drive resumable dùng chunk 32 MiB, vẫn xác nhận offset khi mất phản hồi và đối chiếu checksum/kích thước trên Drive. ZIP64 vẫn dùng DEFLATE level 1 để cân bằng CPU và dung lượng upload. Tin tiến độ hiện dung lượng và tốc độ trung bình MiB/s, cập nhật 15 giây/lần.
+Kiểm tra SHA-256 từng operation và ảnh cuối vẫn bắt buộc. SHA-256 và MD5 cuối được tính trong một lượt đọc; upload tái sử dụng MD5 đã kiểm tra. Drive resumable dùng chunk 32 MiB, vẫn xác nhận offset khi mất phản hồi và đối chiếu checksum/kích thước trên Drive. ZIP64 vẫn dùng DEFLATE level 1 để cân bằng CPU và dung lượng upload. Tin tiến độ hiện dung lượng và tốc độ trung bình MiB/s, cập nhật 2 giây/lần khi có thay đổi.
 
 Có thể chỉnh Actions variables `EXTRACT_WORKERS` (1–16, mặc định 8), `RANGE_BATCH_MIB` (1–32, mặc định 8), `DECODE_WORKERS` (1–4, mặc định 2), `DRIVE_CHUNK_MIB` (1–256, mặc định 32). Số luồng hoặc khối upload lớn hơn không đảm bảo nhanh hơn nếu CDN, CPU hoặc đường mạng giới hạn; đo lại trên cùng nguồn khi chỉnh. Script setup đồng bộ các biến này từ `.env`. Tác vụ đang chạy giữ bản mã đã checkout; tối ưu áp dụng cho tác vụ mới.
 
