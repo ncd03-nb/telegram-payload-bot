@@ -15,6 +15,7 @@ from .security import SourceError, validate_url
 from .settings import Settings
 from .store import Store
 from .telegram import Telegram
+from .failover import Failover
 
 HELP = '''🤖 Payload → IMG → Google Drive
 /list <link ZIP OTA/payload.bin> — xem phân vùng.
@@ -41,6 +42,7 @@ class Bot:
         self.username = ''
         self.scan_times = {}
         self.job_tasks = {}
+        self.hub = Failover(self) if settings.hub_url else None
 
     async def start(self, app):
         if not self.s.github_token:
@@ -49,6 +51,9 @@ class Bot:
         self.lock = (self.s.data_dir / 'instance.lock').open('a+b')
         fcntl.flock(self.lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         self.store.recover()
+        if self.hub:
+            self.tasks = [asyncio.create_task(self.hub.run())]
+            return
         await self.tg.start(); await self.actions.start()
         try:
             identity = await self.tg.call('getMe')
@@ -72,6 +77,19 @@ class Bot:
         if self.tg.session: await self.tg.close()
         await self.actions.close(); self.store.close()
         if self.lock: self.lock.close()
+
+    async def hub_activate(self):
+        await self.tg.start(); await self.actions.start()
+        self.username = (await self.tg.call('getMe'))['username'].lower()
+        return [asyncio.create_task(self.updates()), asyncio.create_task(self.worker())]
+
+    async def hub_deactivate(self):
+        if self.tg.session: await self.tg.close()
+        await self.actions.close()
+
+    async def wake(self, request):
+        if not self.hub: raise web.HTTPNotFound()
+        return await self.hub.wake(request)
 
     async def poll(self):
         offset = 0
@@ -259,13 +277,15 @@ class Bot:
         ok = all(not task.done() for task in self.tasks)
         return web.json_response({'status':'ok' if ok else 'degraded','bot':'payload','storage':'gdrive',
             'public':self.s.public,'groups':self.s.groups,'public_files':self.s.public_files,
-            'max_concurrent':self.s.max_concurrent,'active_jobs':len(self.job_tasks)},status=200 if ok else 503)
+            'max_concurrent':self.s.max_concurrent,'active_jobs':len(self.job_tasks),
+            'failover':self.hub.status() if self.hub else None},status=200 if ok else 503)
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
     s = Settings.load(); bot = Bot(s)
     app = web.Application(); app.router.add_get('/health',bot.health)
+    app.router.add_post('/wake',bot.wake)
     app.on_startup.append(bot.start); app.on_cleanup.append(bot.close)
     web.run_app(app,host='0.0.0.0',port=s.port,access_log=None,print=None)
 

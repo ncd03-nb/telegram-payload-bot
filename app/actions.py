@@ -15,6 +15,7 @@ class Actions:
     def __init__(self, settings):
         self.s = settings
         self.session = None
+        self.before_dispatch = None
         self.base = f"https://api.github.com/repos/{settings.github_repo}"
 
     async def start(self):
@@ -33,6 +34,8 @@ class Actions:
             return await r.json() if r.content_length != 0 and r.status != 204 else {}
 
     async def dispatch(self, job):
+        if self.before_dispatch:
+            await self.before_dispatch()
         # Inputs go through JSON, never interpolation into shell commands.
         return await self.request("POST", "/actions/workflows/extract.yml/dispatches", {
             "ref": self.s.github_ref, "inputs": {

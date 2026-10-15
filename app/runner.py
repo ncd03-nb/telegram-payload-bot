@@ -1,4 +1,5 @@
 import asyncio
+from .failover import notify_result
 import json
 import os
 import re
@@ -150,6 +151,7 @@ async def run():
                 if file.is_file() and file.suffix in {'.img', '.zip', '.partial'}:
                     file.unlink()
         await tg.close()
+        await notify_result(s, task_id)
     return 0 if result['state'] == 'done' else 1
 
 

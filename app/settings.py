@@ -24,6 +24,9 @@ class Settings:
     range_batch_mib: int = 8
     decode_workers: int = 2
     drive_chunk_mib: int = 32
+    hub_url: str = ''
+    hub_role: str = 'docker'
+    hub_bot: str = 'payload'
 
     @classmethod
     def load(cls):
@@ -43,7 +46,10 @@ class Settings:
             extract_workers=int(os.getenv('EXTRACT_WORKERS','8')),
             range_batch_mib=int(os.getenv('RANGE_BATCH_MIB','8')),
             decode_workers=int(os.getenv('DECODE_WORKERS','2')),
-            drive_chunk_mib=int(os.getenv('DRIVE_CHUNK_MIB','32')))
+            drive_chunk_mib=int(os.getenv('DRIVE_CHUNK_MIB','32')),
+            hub_url=os.getenv('HUB_URL','').rstrip('/'),
+            hub_role=os.getenv('HUB_ROLE','docker'),
+            hub_bot=os.getenv('HUB_BOT_ID','payload'))
         if not re.fullmatch(r'\d+:[A-Za-z0-9_-]+', s.token) or (not s.public and not s.users):
             raise ValueError('Thiếu token bot hoặc ALLOWED_USER_IDS.')
         if not re.fullmatch(r'[\w.-]+/[\w.-]+', s.github_repo) or not 0 < s.max_output <= 100 * 1024**3:
@@ -53,6 +59,8 @@ class Settings:
         if not (1 <= s.extract_workers <= 16 and 1 <= s.range_batch_mib <= 32
                 and 1 <= s.decode_workers <= 4 and 1 <= s.drive_chunk_mib <= 256):
             raise ValueError('Cấu hình pipeline trích xuất/upload không hợp lệ.')
+        from .failover import validate_hub
+        validate_hub(s)
         s.data_dir.mkdir(parents=True, exist_ok=True)
         if os.getenv('GOOGLE_TOKEN_B64') and not s.google_token.exists():
             s.google_token.parent.mkdir(parents=True, exist_ok=True)

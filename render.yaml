@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: telegram-payload-standby
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: HUB_ROLE
+        value: render
+      - key: HUB_BOT_ID
+        value: payload
+      - key: HUB_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ACTIONS_DISPATCH_TOKEN
+        sync: false
+      - key: GOOGLE_TOKEN_B64
+        sync: false
+      - key: ACTIONS_REPO
+        value: ncd03-nb/telegram-payload-bot
+      - key: PUBLIC_BOT
+        value: true
+      - key: ALLOW_GROUPS
+        value: true
+      - key: PUBLIC_FILES
+        value: true
+      - key: DATA_DIR
+        value: /data
+      - key: GOOGLE_TOKEN_PATH
+        value: /config/google-token.json
