@@ -148,9 +148,10 @@ async def run():
         else:
             await progress.render('❌ ' + task_id + ' — ' + result.get('error', 'Runner bị ngắt.'))
         try:
-            for file in result['files']:
-                await send_file(tg, chat, file, message_id=message)
-            result['notified'] = True
+            if not s.hub_url:
+                for file in result['files']:
+                    await send_file(tg, chat, file, message_id=message)
+                result['notified'] = True
         except Exception:
             pass
         output = Path(os.getenv('RESULT_PATH', str(s.data_dir / 'result.json')))

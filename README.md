@@ -5,9 +5,9 @@ Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên tron
 ## Sử dụng
 
 1. Mở bot và gửi `/start`.
-2. Gửi `/list <link ROM>`. Bot gửi một tin “Đang đọc…” rồi sửa chính tin đó thành mã ROM và danh sách phân vùng/dung lượng. Danh sách dài có nút Trước/Sau trên cùng tin nhắn. Link không kèm lệnh được bỏ qua.
+2. Gửi `/list <link ROM>`. Bot cập nhật một tin “Đang đọc…” riêng; khi đọc xong mới gửi một tin kết quả reply lệnh gốc, gộp mã ROM và danh sách phân vùng/dung lượng. Danh sách dài có nút Trước/Sau trên cùng tin nhắn. Link không kèm lệnh được bỏ qua.
 3. Gửi `/extract <mã ROM> boot,init_boot,vbmeta`, hoặc `/extract <link> boot`.
-4. Tin nhắn tiến độ được chỉnh sửa khoảng 2 giây/lần khi tiến độ thay đổi sau khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi sửa **chính tin tiến độ thành kết quả có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có phiên bản ROM, tên file, dung lượng và tên các ảnh trong ZIP. Phiên bản lấy từ metadata target build trong ZIP OTA (tối đa 64 KiB), hoặc tên/đường dẫn URL gốc và URL CDN sau redirect; không đọc query token. Nếu thiếu thông tin, hiển thị “Không xác định”; nếu chỉ có mã build, hiển thị “Build <mã>”. `/files` giữ lại phiên bản của kết quả mới. Cả tiến độ và kết quả reply trực tiếp tin nhắn yêu cầu của người dùng, giữ đúng topic trong group.
+4. Tin nhắn tiến độ được chỉnh sửa khoảng 2 giây/lần khi tiến độ thay đổi sau khi runner bắt đầu. Nếu chọn nhiều phân vùng, bot nén các ảnh vào **một ZIP**, upload ZIP lên Google Drive rồi gửi **một tin kết quả reply lệnh gốc, có một nút tải**. Nếu chọn một phân vùng, kết quả là `.img` trực tiếp. Tin nhắn có phiên bản ROM, tên file, dung lượng và tên các ảnh trong ZIP. Phiên bản lấy từ metadata target build trong ZIP OTA (tối đa 64 KiB), hoặc tên/đường dẫn URL gốc và URL CDN sau redirect; không đọc query token. Nếu thiếu thông tin, hiển thị “Không xác định”; nếu chỉ có mã build, hiển thị “Build <mã>”. `/files` giữ lại phiên bản của kết quả mới. Cả tiến độ và kết quả reply trực tiếp tin nhắn yêu cầu của người dùng, giữ đúng topic trong group.
 
 `/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ.
 
