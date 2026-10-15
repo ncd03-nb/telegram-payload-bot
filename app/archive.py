@@ -39,7 +39,7 @@ def completion(parts):
 
 class Archive:
     def __init__(self, access, secret, workers=4, part_mib=32):
-        if not 1 <= workers <= 8 or not 5 <= part_mib <= 64 or workers*part_mib > 256:
+        if not 1 <= workers <= 16 or not 5 <= part_mib <= 64 or workers*part_mib > 256:
             raise ValueError('Invalid multipart bounds')
         if not access or not secret or any(c in access+secret for c in '\r\n:'):
             raise ValueError('Invalid Archive credentials')
@@ -48,7 +48,7 @@ class Archive:
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=240,connect=30,sock_read=180),
-            connector=aiohttp.TCPConnector(limit=10),trust_env=False,
+            connector=aiohttp.TCPConnector(limit=18),trust_env=False,
             headers={'User-Agent':'TelegramBot-IAS3Multipart/1.0'})
         return self
 
@@ -80,7 +80,9 @@ class Archive:
         meta={'x-archive-auto-make-bucket':'1','x-archive-queue-derive':'0',
             'x-archive-meta-collection':'test_collection','x-archive-meta-mediatype':'data',
             'x-archive-meta-title':'Temporary multipart network benchmark','x-archive-size-hint':str(size)}
+        started=time.monotonic()
         raw=await self.request('POST',url+'?uploads',headers=meta)
+        initiated=time.monotonic()
         uid=xml_value(raw,'UploadId')
         if not uid or len(uid)>1024:raise ArchiveError('IAS3 did not return an upload ID')
         query='uploadId='+quote(uid,safe='')
@@ -109,11 +111,15 @@ class Archive:
             async with asyncio.TaskGroup() as group:
                 for _ in range(min(self.workers,count)):group.create_task(worker())
             if len(parts)!=count:raise ArchiveError('Missing multipart results')
+            parts_finished=time.monotonic()
             await self.request('POST',url+'?'+query,completion(parts),
                 {'Content-Type':'application/xml','x-archive-queue-derive':'0'})
             committed=True
             return {'identifier':identifier,'url':'https://archive.org/download/'+identifier+'/'+quote(path.name),
-                    'parts':count,'part_mib':self.part_bytes//1024**2,'workers':self.workers}
+                    'parts':count,'part_mib':self.part_bytes//1024**2,'workers':self.workers,
+                    'init_seconds':round(initiated-started,3),'parts_seconds':round(parts_finished-initiated,3),
+                    'parts_mib_s':round(size/1024**2/max(.001,parts_finished-initiated),2),
+                    'commit_seconds':round(time.monotonic()-parts_finished,3)}
         finally:
             if not committed:
                 try:

@@ -50,7 +50,7 @@ class MultipartTests(unittest.IsolatedAsyncioTestCase):
     async def test_redirect_hosts_and_memory_bounds_are_enforced(self):
         for url in ['http://archive.org/a','https://archive.org.evil.invalid/a','https://user@archive.org/a']:
             with self.assertRaises(ArchiveError):safe_url(url)
-        for workers,part in [(9,32),(8,64),(1,4)]:
+        for workers,part in [(17,16),(8,64),(1,4)]:
             with self.assertRaises(ValueError):Archive('access','secret',workers,part)
         with self.assertRaises(ValueError):
             await Archive('access','secret').cleanup({'path':'file.bin'},'an-existing-user-item')
