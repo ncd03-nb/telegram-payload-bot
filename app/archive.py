@@ -140,7 +140,10 @@ class Archive:
         if not re.fullmatch(r'bot-upload-test-[a-f0-9]{32}',identifier):raise ValueError('Invalid sandbox ID')
         url='https://s3.us.archive.org/'+identifier+'/'+quote(Path(file['path']).name)
         async with asyncio.timeout(25):
-            await self.request('DELETE',url,headers={'x-archive-keep-old-version':'1','x-archive-queue-derive':'0'})
+            try:
+                await self.request('DELETE',url,headers={'x-archive-keep-old-version':'1','x-archive-queue-derive':'0'})
+            except ArchiveError as error:
+                if str(error)!='IAS3 HTTP 404':raise
 
 
 async def public_download(session,url,headers=None):

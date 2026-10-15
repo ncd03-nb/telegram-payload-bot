@@ -10,6 +10,12 @@ from unittest.mock import AsyncMock
 
 
 class MultipartTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cleanup_is_idempotent_when_sample_is_already_gone(self):
+        client=Archive('access','secret')
+        client.request=AsyncMock(side_effect=ArchiveError('IAS3 HTTP 404'))
+        await client.cleanup({'path':'sample.bin'},'bot-upload-test-'+'c'*32)
+        client.request.assert_awaited_once()
+
     async def test_reuses_validated_archive_redirect_and_expect_continue(self):
         class Response:
             def __init__(self,status,location=None):
