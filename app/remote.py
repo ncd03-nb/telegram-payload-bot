@@ -10,6 +10,7 @@ import aiohttp
 
 from .security import PublicResolver, SourceError, validate_url
 from .rom import version_from_url, version_from_metadata
+from .drive_source import drive_file, resolve_drive
 
 
 class Remote:
@@ -31,6 +32,9 @@ class Remote:
             timeout=aiohttp.ClientTimeout(total=120, sock_connect=25, sock_read=60),
             auto_decompress=False, trust_env=False)
         try:
+            if drive_file(self.url):
+                self.url, name = await resolve_drive(self.session, self.url)
+                self.rom_version = self.rom_version or version_from_url('https://drive.google.com/' + name)
             parsed = urlsplit(self.url)
             if parsed.path.rstrip('/').endswith('/downloadCheck'):
                 if not (parsed.hostname or '').endswith(('.allawnos.com', '.allawntech.com', '.coloros.com', '.oplusota.com')):

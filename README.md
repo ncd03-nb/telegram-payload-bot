@@ -11,6 +11,10 @@ Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên tron
 
 `/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ.
 
+Link Google Drive dùng được với cả `/list` và `/extract`, ví dụ `/extract https://drive.google.com/file/d/FILE_ID/view my_stock`. Hỗ trợ link `/file/d/...`, `/open?id=...`, `/uc?id=...`, link tải `drive.usercontent.google.com`, resource key và trang xác nhận tải file lớn. Drive phải chứa **file ZIP OTA hoặc payload.bin**, được chia sẻ **Bất kỳ ai có đường liên kết / Người xem** và cho phép tải. Bot lấy byte bằng HTTP Range để chỉ đọc các phân vùng cần thiết, không tải cả ROM. Phiên bản ROM có thể lấy từ tên file Drive hoặc metadata bên trong ZIP.
+
+Đọc nguồn Drive không sử dụng OAuth của chủ bot: người dùng bot không thể dùng link để mở file riêng tư của tài khoản đã kết nối. OAuth hiện có chỉ dùng cho upload kết quả. Link thư mục/Docs, quota tải xuống, yêu cầu đăng nhập hoặc nguồn không hỗ trợ Range sẽ báo lỗi rõ ràng; không bỏ qua các giới hạn của Google Drive.
+
 Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh bắt đầu bằng `/` trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua link không kèm lệnh, lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, các tác vụ được kiểm tra theo chủ tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
 
 Trong @BotFather, `/setprivacy` → chọn @pdoplus_bot → Disable. Nếu bot đã ở trong group trước khi đổi, xóa rồi thêm lại. Bot cần quyền gửi tin nhắn; không cần quyền quản trị. [Telegram group privacy](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get).
@@ -38,6 +42,7 @@ Google OAuth của ứng dụng External ở trạng thái Testing có thể h�
 ## Phạm vi hỗ trợ
 
 - HTTP(S) công khai, server hỗ trợ `Range`/HTTP 206. Từ chối IP nội bộ, cổng tùy chỉnh, URL chứa credentials; kiểm tra DNS cho cả redirect.
+- Link chia sẻ Google Drive công khai được đổi sang endpoint tải, xử lý xác nhận và giữ resource key. Không gửi OAuth Google/GitHub tới link nguồn hoặc CDN.
 - ZIP/ZIP64, `payload.bin` đặt ở thư mục gốc với phương thức `ZIP_STORED`. ZIP nén payload ở lớp ZIP hoặc mã hóa sẽ báo lỗi, không tải cả ROM để thử.
 - Payload v2, full OTA: `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, `ZERO`, `DISCARD`. Mỗi operation giới hạn 32 MiB nén/64 MiB giải nén. Kiểm tra SHA-256 operation nếu có và bắt buộc SHA-256 ảnh cuối. Có thể liệt kê delta OTA nhưng không xuất operation cần ảnh cũ.
 - Đọc metadata khoảng vài trăm KiB; chỉ tải các operation của phân vùng được chọn. Không cần tải toàn bộ ROM 10–12 GB. Ảnh được ghi một phân vùng/lần trên runner, kiểm tra SHA-256 rồi thêm vào ZIP64 (DEFLATE level 1) và xóa ảnh trung gian. Chỉ ZIP cuối được upload resumable 8 MiB/chunk; kiểm tra dung lượng và MD5 trên Drive rồi xóa bản local. Với một phân vùng, upload `.img` trực tiếp. ZIP lớn vẫn cần chỗ trống trên runner; nếu không đủ cho ZIP và ảnh đang nén, bot báo chọn ít phân vùng hơn. Giới hạn 40 GiB là tổng ảnh, không đảm bảo mọi ROM đủ chỗ để xuất `all`.
