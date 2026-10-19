@@ -69,4 +69,6 @@ python scripts/probe.py --sources config/test-sources.json --partitions vbmeta,i
 
 `config/test-sources.json` là mapping tên hãng → URL riêng, không commit URL ký. Kết quả báo cáo/ảnh local nằm trong `data/`. Kiểm thử gồm checksum lỗi, giới hạn giải nén, extent vượt file, đường dẫn không hợp lệ, ZIP64, delta bị từ chối, Range/ETag sai và phục hồi workflow sau restart.
 
+Hỗ trợ nguồn Drive đã được kiểm tra bằng 74 bài kiểm tra, gồm trang xác nhận file lớn, resource key, link giả mạo, redirect đăng nhập và file riêng tư/quota. [Lượt thử Actions](https://github.com/ncd03-nb/telegram-payload-bot/actions/runs/39222383586) đọc ZIP OTA tổng hợp từ Drive công khai, trích `boot`, kiểm tra SHA-256 và upload kết quả thành công. File nguồn/kết quả thử đã chuyển vào thùng rác. Một link ROM Drive thực tế trước đó bị HTTP 200 đã đọc được 65 phân vùng qua khoảng 400 KiB dữ liệu; chưa tải cả ROM hoặc trích phân vùng lớn trong bài kiểm tra này.
+
 Nguồn định dạng: [AOSP update_metadata.proto](https://android.googlesource.com/platform/system/update_engine/+/refs/heads/main/update_metadata.proto). Upload theo [Google Drive resumable upload](https://developers.google.com/workspace/drive/api/guides/manage-uploads), quyền theo [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
