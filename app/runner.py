@@ -5,6 +5,7 @@ import os
 import re
 import signal
 import time
+import traceback
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -145,6 +146,9 @@ async def run():
         result.update(state='cancelled', error='Đã hủy; các file hoàn tất trước đó vẫn nằm trên Drive.')
         raise
     except Exception as e:
+        # Frame locations identify programming errors without logging source URLs/tokens.
+        print('Runner failure: '+type(e).__name__+' at '+','.join(
+            Path(frame.filename).name+':'+str(frame.lineno) for frame in traceback.extract_tb(e.__traceback__)),flush=True)
         result['error'] = str(e) if isinstance(e, SourceError) else 'Trích xuất/upload thất bại; kiểm tra nguồn, OAuth hoặc quota.'
     finally:
         ticker.cancel(); await asyncio.gather(ticker, return_exceptions=True)
