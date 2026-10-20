@@ -8,7 +8,7 @@ import aiohttp
 from aiohttp import web
 
 from .actions import Actions
-from .payload import Payload
+from .image_source import load_source
 from .remote import Remote
 from .runner import selection, send_file
 from .security import SourceError, validate_url
@@ -18,7 +18,7 @@ from .telegram import Telegram
 from .failover import Failover
 
 HELP = '''🤖 Payload → IMG → Google Drive
-/list <link ZIP OTA/payload.bin> — xem phân vùng.
+/list <link ZIP/payload.bin/super.img> — tự nhận diện phân vùng.
 Nhiều phân vùng → 1 ZIP, 1 nút tải. Một phân vùng → .img.
 /extract <mã ROM hoặc link> boot,init_boot,vbmeta
 /extract <mã ROM> all — xuất mọi phân vùng (tối đa 40 GiB)
@@ -145,7 +145,7 @@ class Bot:
         self.scan_times[owner] = recent + [now]
         async with asyncio.timeout(180):
             async with Remote(url) as remote:
-                payload = await Payload(remote).load()
+                payload = await load_source(remote)
                 rows = payload.summary()
         sid = uuid.uuid4().hex[:12]
         with self.store.db:

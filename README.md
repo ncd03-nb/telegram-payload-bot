@@ -2,6 +2,8 @@
 
 Bot riêng **@pdoplus_bot**: đọc `payload.bin` hoặc `payload.bin` bên trong ZIP OTA, trích xuất các phân vùng được chọn thành `.img`, kiểm tra SHA-256 theo manifest rồi upload vào Google Drive. Controller chạy hoàn toàn trên Cloudflare; đọc metadata, trích xuất và upload chạy trên GitHub Actions. Repo hiện là public; inputs/artifacts tác vụ được mã hóa AES-256-GCM. Xem [hướng dẫn controller Cloudflare](https://github.com/ncd03-nb/telegram-onedrive-bot/blob/main/docs/cloudflare-controller.md). Docker/Render cũ đã dừng.
 
+Bot cũng **tự nhận diện ZIP chứa các ảnh phân vùng có sẵn** (`system/*.img`, `images/*.img`, `firmware-update/*.img`...) và **`super/super.img`** chứa phân vùng logic. Có thể gửi link `super.img` raw/Android sparse trực tiếp. Không cần thêm lệnh hoặc chọn định dạng: `/list <link>` rồi `/extract <link hoặc mã ROM> system,vendor`.
+
 ## Sử dụng
 
 1. Mở bot và gửi `/start`.
@@ -44,8 +46,12 @@ Google OAuth của ứng dụng External ở trạng thái Testing có thể h�
 - HTTP(S) công khai, server hỗ trợ `Range`/HTTP 206. Từ chối IP nội bộ, cổng tùy chỉnh, URL chứa credentials; kiểm tra DNS cho cả redirect.
 - Link chia sẻ Google Drive công khai được đổi sang endpoint tải, xử lý xác nhận và giữ resource key. Không gửi OAuth Google/GitHub tới link nguồn hoặc CDN.
 - ZIP/ZIP64, `payload.bin` đặt ở thư mục gốc với phương thức `ZIP_STORED`. ZIP nén payload ở lớp ZIP hoặc mã hóa sẽ báo lỗi, không tải cả ROM để thử.
+- ZIP/ZIP64 chứa ảnh `.img` riêng: đọc đúng entry bằng Range, hỗ trợ `ZIP_STORED` và DEFLATE, kiểm tra CRC32/kích thước trước khi upload. Chỉ lấy tên file làm tên phân vùng; từ chối đường dẫn không an toàn và tên phân vùng trùng nhau.
+- `super.img` raw hoặc Android sparse, liblp v10.0–10.2, một block device: kiểm tra SHA-256 geometry/header/bảng metadata, giới hạn và chồng lấn extents; hỗ trợ LINEAR/ZERO và sparse RAW/FILL/DONT_CARE. Tự dùng metadata backup nếu bản chính lỗi. Slot duy nhất có dữ liệu hiện thành tên `system`/`vendor`; nếu cả hai slot có dữ liệu thì giữ `_a`/`_b` để người dùng chọn đúng ảnh. Không hỗ trợ super chia nhiều file/device hoặc ảnh mã hóa.
+- Ảnh ZIP/super không có SHA-256 chuẩn của từng phân vùng như payload OTA. Bot tính SHA-256 kết quả và xác minh MD5/kích thước khi upload Drive; metadata hash/CRC không thay thế xác minh chữ ký ROM. CRC của toàn super nén chỉ kiểm tra được khi đã đọc hết entry.
 - Payload v2, full OTA: `REPLACE`, `REPLACE_BZ`, `REPLACE_XZ`, `ZERO`, `DISCARD`. Mỗi operation giới hạn 32 MiB nén/64 MiB giải nén. Kiểm tra SHA-256 operation nếu có và bắt buộc SHA-256 ảnh cuối. Có thể liệt kê delta OTA nhưng không xuất operation cần ảnh cũ.
 - Đọc metadata khoảng vài trăm KiB; chỉ tải các operation của phân vùng được chọn. Không cần tải toàn bộ ROM 10–12 GB. Ảnh được ghi một phân vùng/lần trên runner, kiểm tra SHA-256 rồi thêm vào ZIP64 (DEFLATE level 1) và xóa ảnh trung gian. Chỉ ZIP cuối được upload resumable 8 MiB/chunk; kiểm tra dung lượng và MD5 trên Drive rồi xóa bản local. Với một phân vùng, upload `.img` trực tiếp. ZIP lớn vẫn cần chỗ trống trên runner; nếu không đủ cho ZIP và ảnh đang nén, bot báo chọn ít phân vùng hơn. Giới hạn 40 GiB là tổng ảnh, không đảm bảo mọi ROM đủ chỗ để xuất `all`.
+- Riêng `super.img` nằm trong ZIP DEFLATE: phải giải nén tuần tự phần trước vùng cần đọc. Bot lưu cache trên ổ runner, bộ đệm giải nén có giới hạn, hiện tiến độ cache và dọn khi tác vụ kết thúc/hủy. ZIP có ảnh riêng chỉ đọc entry được chọn. Phân vùng nằm cuối super hoặc `/extract all` có thể chậm/tốn ổ; nếu runner thiếu dung lượng sẽ báo lỗi và không upload ảnh dở dang. Quét metadata có timeout 8 phút, workflow quét tối đa 10 phút.
 - OPlus `downloadCheck` được xử lý bằng header của updater (`User-Agent: okhttp/3.12.12`, `userId: oplus-ota|16002018`), theo cách trong repo ROM hiện có. Chỉ gửi các header này đến host OTA OPlus được hỗ trợ, không gửi credential Google/GitHub tới CDN.
 - Kiểm tra hash không xác nhận chữ ký nhà sản xuất; bot xuất ảnh để tải về, không tự flash thiết bị.
 

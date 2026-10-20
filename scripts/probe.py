@@ -8,13 +8,13 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from app.remote import Remote
-from app.payload import Payload
+from app.image_source import load_source
 
 
 async def probe(brand,url,output,names):
     started=time.monotonic()
     async with Remote(url) as remote:
-        payload=await Payload(remote).load()
+        payload=await load_source(remote)
         report={'source_bytes':remote.size,'metadata_bytes':remote.downloaded,'partitions':payload.summary(),'extracted':[]}
         for name in names:
             result=await payload.extract(name,output/brand)

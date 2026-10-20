@@ -4,6 +4,9 @@ import json
 import re
 import struct
 import zlib
+import os
+import tempfile
+from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 import aiohttp
@@ -25,6 +28,16 @@ class Remote:
         self.rom_version = version_from_url(url)
         self.concurrency = concurrency
         self.requests = 0
+        self.cache = None
+
+    def cache_directory(self):
+        if self.cache is None:
+            base = Path(os.getenv('DATA_DIR', 'data')).resolve()
+            base.mkdir(parents=True, exist_ok=True)
+            self.cache = tempfile.TemporaryDirectory(prefix='rom-cache-', dir=base)
+            if Path(self.cache.name).resolve().parent != base:
+                raise SourceError('Thư mục cache không hợp lệ.')
+        return Path(self.cache.name)
 
     async def __aenter__(self):
         self.session = aiohttp.ClientSession(
@@ -58,6 +71,8 @@ class Remote:
 
     async def __aexit__(self, *args):
         await self.session.close()
+        if self.cache:
+            self.cache.cleanup()
 
     async def read(self, offset, length):
         if offset < 0 or length <= 0 or length > 32 * 1024**2 or (self.size is not None and offset + length > self.size):

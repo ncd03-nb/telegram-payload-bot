@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from .gdrive import Drive
-from .payload import Payload
+from .image_source import load_source
 from .remote import Remote
 from .security import SourceError
 from .settings import Settings
@@ -23,7 +23,7 @@ def selection(text, parts):
     if not names or any(n not in parts for n in names):
         raise SourceError('Tên phân vùng không có trong ROM; dùng /list để xem.')
     if any(not parts[n]['supported'] for n in names):
-        raise SourceError('Lựa chọn chứa delta operation cần ảnh ROM gốc; chưa hỗ trợ trích xuất độc lập.')
+        raise SourceError('Lựa chọn chứa phân vùng chưa hỗ trợ: delta cần ảnh ROM gốc hoặc ảnh ZIP mã hóa/không có dữ liệu.')
     return names
 
 
@@ -88,7 +88,11 @@ async def run():
     try:
         async with asyncio.timeout(19800):
             async with Remote(os.environ['JOB_SOURCE_URL'],concurrency=s.extract_workers) as remote, Drive(s.google_token,chunk_mib=s.drive_chunk_mib) as drive:
-                payload = await Payload(remote).load()
+                async def preparing(done, end):
+                    progress.phase = 'Giải nén ảnh ZIP để đọc phân vùng'
+                    progress.detail = f'Cache đã giải nén: {done/1024**2:.0f}/{end/1024**2:.0f} MiB cần đọc'
+                remote.prepare_progress = preparing
+                payload = await load_source(remote)
                 names = selection(os.environ['JOB_PARTITIONS'], payload.parts)
                 total = sum(payload.parts[n]['size'] for n in names)
                 if total > s.max_output:
@@ -98,9 +102,10 @@ async def run():
                 result['extraction_metrics'] = []
                 with Bundle(directory, task_id) if multiple else nullcontext() as bundle:
                     for name in names:
-                        progress.name, progress.phase = name + '.img', 'Trích xuất và kiểm tra SHA-256'
+                        progress.name, progress.phase = name + '.img', ('Trích xuất và kiểm tra SHA-256' if getattr(payload,'trusted_hashes',True) else 'Trích xuất ảnh và tính SHA-256')
                         part_started = time.monotonic()
                         async def extracted(count, size):
+                            progress.phase = ('Trích xuất và kiểm tra SHA-256' if getattr(payload,'trusted_hashes',True) else 'Trích xuất ảnh và tính SHA-256')
                             progress.percent = (70 * completed + 60 * count) / total if multiple else 60 * count / total
                             rate=count/1024**2/max(.001,time.monotonic()-part_started)
                             progress.detail=f'Trích: {count/1024**2:.0f}/{size/1024**2:.0f} MiB · {rate:.1f} MiB/s'
