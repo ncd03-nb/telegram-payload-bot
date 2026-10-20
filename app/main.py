@@ -144,7 +144,7 @@ class Bot:
             self.scan_times = {k:v for k,v in self.scan_times.items() if v and now-v[-1] < 60}
         self.scan_times[owner] = recent + [now]
         async with asyncio.timeout(180):
-            async with Remote(url) as remote:
+            async with Remote(url,cache_dir=self.s.data_dir) as remote:
                 payload = await load_source(remote)
                 rows = payload.summary()
         sid = uuid.uuid4().hex[:12]

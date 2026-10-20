@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import zipfile
 import zlib
+from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
 
 from app.image_source import load_source
@@ -80,6 +81,16 @@ def archive(entries, method=zipfile.ZIP_DEFLATED, zip64=False):
 
 
 class ImageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cache_uses_configured_writable_data_mount_and_is_cleaned(self):
+        with tempfile.TemporaryDirectory() as folder:
+            remote=Remote('https://example.com/rom.zip',cache_dir=folder)
+            remote.session=MagicMock(close=AsyncMock())
+            cache=remote.cache_directory()
+            self.assertEqual(cache.parent,Path(folder).resolve())
+            (cache/'entry').write_bytes(b'test')
+            await remote.__aexit__(None,None,None)
+            self.assertFalse(cache.exists())
+
     async def test_existing_payload_detection_preserves_manifest_hash_verification(self):
         payload,image = fixture(8)
         for data in (payload,archive([('payload.bin',payload)],zipfile.ZIP_STORED,True)):

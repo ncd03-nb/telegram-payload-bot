@@ -88,7 +88,7 @@ async def run():
     directory = s.data_dir / task_id
     try:
         async with asyncio.timeout(19800):
-            async with Remote(os.environ['JOB_SOURCE_URL'],concurrency=s.extract_workers) as remote, Drive(s.google_token,chunk_mib=s.drive_chunk_mib) as drive:
+            async with Remote(os.environ['JOB_SOURCE_URL'],concurrency=s.extract_workers,cache_dir=s.data_dir) as remote, Drive(s.google_token,chunk_mib=s.drive_chunk_mib) as drive:
                 async def preparing(done, end):
                     progress.phase = 'Giải nén ảnh ZIP để đọc phân vùng'
                     progress.detail = f'Cache đã giải nén: {done/1024**2:.0f}/{end/1024**2:.0f} MiB cần đọc'

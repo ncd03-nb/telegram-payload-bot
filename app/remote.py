@@ -17,7 +17,7 @@ from .drive_source import drive_file, resolve_drive
 
 
 class Remote:
-    def __init__(self, url, concurrency=8):
+    def __init__(self, url, concurrency=8, cache_dir=None):
         if not 1 <= concurrency <= 16:
             raise ValueError('Invalid range concurrency')
         self.url = validate_url(url)
@@ -29,10 +29,11 @@ class Remote:
         self.concurrency = concurrency
         self.requests = 0
         self.cache = None
+        self.cache_base = Path(cache_dir if cache_dir is not None else os.getenv('DATA_DIR', 'data')).resolve()
 
     def cache_directory(self):
         if self.cache is None:
-            base = Path(os.getenv('DATA_DIR', 'data')).resolve()
+            base = self.cache_base
             base.mkdir(parents=True, exist_ok=True)
             self.cache = tempfile.TemporaryDirectory(prefix='rom-cache-', dir=base)
             if Path(self.cache.name).resolve().parent != base:

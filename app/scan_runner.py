@@ -16,7 +16,7 @@ async def run():
     validate_identity(s,jid,owner,chat,message,int(os.getenv('JOB_THREAD_ID','0')),int(os.getenv('JOB_REPLY_TO','0')))
     result={'id':jid,'owner':owner,'kind':'scan','state':'failed'}
     try:
-        async with asyncio.timeout(480),Remote(os.environ['JOB_SOURCE_URL']) as remote:
+        async with asyncio.timeout(480),Remote(os.environ['JOB_SOURCE_URL'],cache_dir=s.data_dir) as remote:
             payload=await load_source(remote)
             result.update(state='done',url=os.environ['JOB_SOURCE_URL'],metadata=payload.summary(),rom_version=remote.rom_version)
     except Exception as error:
