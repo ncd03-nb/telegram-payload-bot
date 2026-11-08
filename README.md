@@ -17,6 +17,8 @@ Link Google Drive dùng được với cả `/list` và `/extract`, ví dụ `/e
 
 Đọc nguồn Drive không sử dụng OAuth của chủ bot: người dùng bot không thể dùng link để mở file riêng tư của tài khoản đã kết nối. OAuth hiện có chỉ dùng cho upload kết quả. Link thư mục/Docs, quota tải xuống, yêu cầu đăng nhập hoặc nguồn không hỗ trợ Range sẽ báo lỗi rõ ràng; không bỏ qua các giới hạn của Google Drive.
 
+Drive có thể cho đọc metadata hoặc một số vùng nhỏ nhưng trả trang HTML báo vượt quota với HTTP 200 khi đọc vùng ảnh tiếp theo. Bot nhận diện lỗi quota cả trong lúc trích xuất, không coi đó là dữ liệu ảnh hoặc báo nhầm thiếu HTTP Range. Khi bị chặn, cần dùng CDN/mirror khác hoặc chờ Drive mở lại quota; thử lại nhiều lần không đảm bảo tải được. Việc đọc nguồn không tự chuyển sang OAuth upload của chủ bot.
+
 Bot đã bật `PUBLIC_BOT=true`: mọi người được dùng trong chat riêng; `ALLOW_GROUPS=true` nhận lệnh bắt đầu bằng `/` trong group và supergroup, kể cả topic. Không cần thêm `@pdoplus_bot`; bot bỏ qua link không kèm lệnh, lệnh gửi đích danh bot khác và nội dung trò chuyện thông thường. Tin nhắn phản hồi reply đúng lệnh của người gửi. Mỗi người tối đa 3 tác vụ đang chờ/chạy, các tác vụ được kiểm tra theo chủ tác vụ. `/status`, `/cancel`, mã ROM và `/files` được kiểm tra theo chủ tác vụ.
 
 Trong @BotFather, `/setprivacy` → chọn @pdoplus_bot → Disable. Nếu bot đã ở trong group trước khi đổi, xóa rồi thêm lại. Bot cần quyền gửi tin nhắn; không cần quyền quản trị. [Telegram group privacy](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get).

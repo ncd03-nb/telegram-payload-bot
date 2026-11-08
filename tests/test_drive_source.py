@@ -2,13 +2,14 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlsplit
 
-from app.drive_source import drive_file, resolve_drive
+from app.drive_source import drive_file, resolve_drive, is_drive_host
 from app.remote import Remote
 from app.security import SourceError
 
 
 ID = 'example_Drive-file123'
 LINK = 'https://drive.google.com/file/d/' + ID + '/view?usp=sharing'
+QUOTA = b'<html><p>Sorry, you can&#39;t view or download this file at this time.</p><p>Too many users have viewed or downloaded this file recently.</p></html>'
 
 
 def response(status, headers=None, body=b''):
@@ -23,6 +24,44 @@ def response(status, headers=None, body=b''):
 
 
 class DriveSourceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_quota_page_during_resolve_reports_quota_without_retrying(self):
+        session = MagicMock()
+        session.get.return_value = response(200, {'Content-Type':'text/html; charset=utf-8'}, QUOTA)
+        with self.assertRaisesRegex(SourceError, 'vượt quota tải xuống'):
+            await resolve_drive(session, LINK)
+        session.get.assert_called_once()
+
+    async def test_quota_after_successful_metadata_ranges_is_not_a_range_error(self):
+        remote = Remote(LINK)
+        remote.url = 'https://drive.usercontent.google.com/download?id=' + ID
+        remote.size, remote.etag, remote.downloaded = 8387067204, 'unchanged', 135051
+        remote.session = MagicMock()
+        remote.session.get.return_value = response(200, {'Content-Type':'text/html'}, QUOTA)
+        with self.assertRaisesRegex(SourceError, 'vượt quota tải xuống'):
+            await remote.read(260157308, 6424446)
+        remote.session.get.assert_called_once()
+        self.assertEqual((remote.size, remote.etag, remote.downloaded), (8387067204, 'unchanged', 135051))
+        headers = remote.session.get.call_args.kwargs['headers']
+        self.assertNotIn('Authorization', headers)
+        self.assertEqual(headers['Range'], 'bytes=260157308-266581753')
+
+    async def test_mid_range_drive_html_is_bounded_and_never_accepted_as_file(self):
+        for body, expected in ((b'<html>Sign in</html>', 'quyền tải'),
+                               (b'a' * (256 * 1024 + 1), 'vượt giới hạn')):
+            with self.subTest(expected=expected):
+                remote = Remote(LINK)
+                remote.url = 'https://download.googleusercontent.com/file'
+                remote.session = MagicMock()
+                remote.session.get.return_value = response(200, {'Content-Type':'text/html'}, body)
+                with self.assertRaisesRegex(SourceError, expected):
+                    await remote.read(0, 32)
+                self.assertEqual(remote.downloaded, 0)
+
+    def test_google_host_check_rejects_lookalikes(self):
+        self.assertTrue(is_drive_host('download.googleusercontent.com'))
+        self.assertFalse(is_drive_host('googleusercontent.com.evil.org'))
+        self.assertFalse(is_drive_host('evilgoogleusercontent.com'))
+
     def test_link_formats_resource_keys_and_folder_rejection(self):
         for path in ('/file/d/' + ID + '/view', '/open?id=' + ID, '/uc?export=download&id=' + ID):
             self.assertEqual(drive_file('https://drive.google.com' + path), (ID, ''))

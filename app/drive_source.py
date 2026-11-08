@@ -1,10 +1,34 @@
 """Resolve public Drive sharing pages without using the bot owner's OAuth."""
 import re
 from email.message import Message
+from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 
 from .security import SourceError, validate_url
+
+
+def is_drive_host(host):
+    host = host.lower()
+    return host in {'drive.google.com', 'www.drive.google.com', 'drive.usercontent.google.com'} or host.endswith('.googleusercontent.com')
+
+
+async def read_drive_html(response):
+    """Bound error/confirmation pages; never buffer a full download as HTML."""
+    html = bytearray()
+    async for block in response.content.iter_chunked(8192):
+        html.extend(block)
+        if len(html) > 256 * 1024:
+            raise SourceError('Trang xác nhận Google Drive vượt giới hạn; cần link tải công khai.')
+    return html.decode('utf-8', 'replace')
+
+
+def check_drive_error(html):
+    text = ' '.join(unescape(re.sub(r'<[^>]*>', ' ', html)).lower().split())
+    if any(marker in text for marker in (
+            'too many users have viewed or downloaded', 'download quota exceeded',
+            'downloadquotaexceeded', 'quota exceeded for quota metric')):
+        raise SourceError('Google Drive đã vượt quota tải xuống của file. Dùng link CDN/mirror khác hoặc thử lại khi Drive mở quota; có thể mất tới 24 giờ. Đây không phải lỗi HTTP Range.')
 
 
 def drive_file(url):
@@ -51,7 +75,7 @@ async def resolve_drive(session, url):
     for _ in range(10):
         validate_url(current)
         host = (urlsplit(current).hostname or '').lower()
-        if host not in {'drive.google.com', 'www.drive.google.com', 'drive.usercontent.google.com'} and not host.endswith('.googleusercontent.com'):
+        if not is_drive_host(host):
             raise SourceError('Google Drive chuyển tới trang đăng nhập hoặc địa chỉ tải không được hỗ trợ. Cần bật “Bất kỳ ai có đường liên kết”.')
         async with session.get(current, headers={'Range': 'bytes=0-31', 'Accept-Encoding': 'identity',
                 'User-Agent': 'PayloadPartitionBot/1.0'}, allow_redirects=False) as response:
@@ -63,13 +87,10 @@ async def resolve_drive(session, url):
             if response.status not in {200, 206}:
                 raise SourceError(f'Google Drive trả HTTP {response.status}; thử lại khi link tải hoạt động.')
             if 'text/html' in response.headers.get('Content-Type', '').lower():
-                html = bytearray()
-                async for block in response.content.iter_chunked(8192):
-                    html.extend(block)
-                    if len(html) > 256 * 1024:
-                        raise SourceError('Trang xác nhận Google Drive vượt giới hạn; cần link tải công khai.')
+                html = await read_drive_html(response)
+                check_drive_error(html)
                 form = Confirmation()
-                form.feed(html.decode('utf-8', 'replace'))
+                form.feed(html)
                 action = urljoin(current, form.action)
                 p = urlsplit(action)
                 if (confirmations >= 2 or not form.action or p.scheme != 'https'

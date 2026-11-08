@@ -13,7 +13,7 @@ import aiohttp
 
 from .security import PublicResolver, SourceError, validate_url
 from .rom import version_from_url, version_from_metadata
-from .drive_source import drive_file, resolve_drive
+from .drive_source import drive_file, resolve_drive, is_drive_host, read_drive_html, check_drive_error
 
 
 class Remote:
@@ -92,6 +92,13 @@ class Remote:
                         if r.status in {301, 302, 303, 307, 308}:
                             current = urljoin(current, r.headers.get('Location', ''))
                             continue
+                        # Drive may allow metadata ranges, then return a quota
+                        # page with HTTP 200 for an image range. Never treat that
+                        # HTML as file bytes or report a missing Range capability.
+                        if (is_drive_host(urlsplit(current).hostname or '')
+                                and 'text/html' in r.headers.get('Content-Type', '').lower()):
+                            check_drive_error(await read_drive_html(r))
+                            raise SourceError('Google Drive trả trang xác nhận hoặc yêu cầu quyền tải thay vì dữ liệu file. Kiểm tra quyền chia sẻ hoặc dùng link CDN/mirror khác.')
                         if r.status in {429, 500, 502, 503, 504}:
                             raise aiohttp.ClientConnectionError('Retry range')
                         match = re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)', r.headers.get('Content-Range', ''))
