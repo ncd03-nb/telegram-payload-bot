@@ -13,6 +13,14 @@ Bot cũng **tự nhận diện ZIP chứa các ảnh phân vùng có sẵn** (`s
 
 `/extract <mã ROM> all` xuất mọi phân vùng được hỗ trợ, tổng tối đa 40 GiB. `/status [mã tác vụ]` xem trạng thái; `/cancel <mã tác vụ>` hủy; `/files <mã tác vụ>` lấy lại nút tải. Mã ROM hết hạn sau 24 giờ.
 
+Với **ROM OPlus**, `/extract <link hoặc mã ROM> all` tự đóng gói một ZIP có đúng ba thư mục ở gốc:
+
+- `SYSTEM/`: `system`, `system_ext`, `system_dlkm`, `vendor`, `vendor_dlkm`, `odm`, `odm_dlkm`, `product`, `super`, `userdata`, `metadata`, `cache` và mọi phân vùng `my_*`.
+- `BOOTLOADER/`: `boot`, `init_boot`, `vendor_boot`, `vendor_kernel_boot`, `recovery`, `dtbo`, `vbmeta` và `vbmeta_*`.
+- `CRITICAL/`: firmware còn lại, gồm `abl`, `aop`, `aop_config`, `bluetooth`, `cpucp`, `cpucp_dtb`, `devcfg`, `dsp`, `engineering_cdt`, `featenabler`, `hyp`, `imagefv`, `keymaster`, `modem`, `oplus_sec`, `oplusstanvbk`, `qupfw`, `shrm`, `splash`, `tz`, `uefi`, `uefisecapp`, `xbl`, `xbl_config`, `xbl_ramdump`… Ảnh chưa có tên trong nhóm khác được giữ ở đây.
+
+Bot nhận diện OPlus bằng các tên phân vùng `my_*`/`oplus*`, mã phiên bản ROM OPlus hoặc host OTA OPlus. File trên Drive và `payload.bin` trực tiếp cũng dùng được khi có dấu hiệu nhận diện này. Giữ nguyên tên ảnh, gồm hậu tố slot `_a`/`_b`; hậu tố chỉ được bỏ qua khi phân loại. ZIP luôn có đủ ba thư mục, kể cả nhóm rỗng, và kết quả Telegram liệt kê đường dẫn như `SYSTEM/my_stock.img`. Chỉ yêu cầu `all` áp dụng cách sắp xếp này; chọn danh sách phân vùng cụ thể và ROM hãng khác vẫn dùng định dạng hiện tại. SHA-256/CRC32, giới hạn dung lượng và cơ chế upload một file vẫn được giữ nguyên.
+
 Link Google Drive dùng được với cả `/list` và `/extract`, ví dụ `/extract https://drive.google.com/file/d/FILE_ID/view my_stock`. Hỗ trợ link `/file/d/...`, `/open?id=...`, `/uc?id=...`, link tải `drive.usercontent.google.com`, resource key và trang xác nhận tải file lớn. Drive phải chứa **file ZIP OTA hoặc payload.bin**, được chia sẻ **Bất kỳ ai có đường liên kết / Người xem** và cho phép tải. Bot lấy byte bằng HTTP Range để chỉ đọc các phân vùng cần thiết, không tải cả ROM. Phiên bản ROM có thể lấy từ tên file Drive hoặc metadata bên trong ZIP.
 
 Đọc nguồn Drive không sử dụng OAuth của chủ bot: người dùng bot không thể dùng link để mở file riêng tư của tài khoản đã kết nối. OAuth hiện có chỉ dùng cho upload kết quả. Link thư mục/Docs, quota tải xuống, yêu cầu đăng nhập hoặc nguồn không hỗ trợ Range sẽ báo lỗi rõ ràng; không bỏ qua các giới hạn của Google Drive.

@@ -12,6 +12,42 @@ from app.security import SourceError
 
 
 class BundleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_oplus_all_zip_has_exact_three_folders_and_verified_image_contents(self):
+        names={'system.img':'SYSTEM', 'my_stock.img':'SYSTEM', 'abl.img':'CRITICAL',
+               'xbl_config.img':'CRITICAL', 'boot.img':'BOOTLOADER',
+               'vbmeta_system.img':'BOOTLOADER', 'boot_a.img':'BOOTLOADER',
+               'system_ext_b.img':'SYSTEM', 'unknown_firmware.img':'CRITICAL'}
+        images={name:(name.encode()*1024) for name in names}
+        with tempfile.TemporaryDirectory() as folder:
+            with Bundle(folder,'abcdef012345',layout='oplus') as bundle:
+                for name,data in images.items():
+                    path=Path(folder)/name; path.write_bytes(data)
+                    await bundle.add({'path':str(path),'name':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+                    self.assertFalse(path.exists())
+                result=await bundle.finish()
+            with zipfile.ZipFile(result['path']) as archive:
+                self.assertIsNone(archive.testzip())
+                self.assertEqual({p.split('/')[0] for p in archive.namelist()}, {'SYSTEM','CRITICAL','BOOTLOADER'})
+                self.assertEqual({i.filename for i in archive.infolist() if i.is_dir()},
+                                 {'SYSTEM/','CRITICAL/','BOOTLOADER/'})
+                self.assertEqual(len(archive.infolist()),len(images)+3)
+                for name,data in images.items():
+                    target=names[name]+'/'+name
+                    self.assertEqual(archive.read(target),data)
+                    member=next(m for m in result['members'] if m['name']==target)
+                    self.assertEqual(member['sha256'],hashlib.sha256(data).hexdigest())
+            self.assertEqual(result['sha256'],hashlib.sha256(Path(result['path']).read_bytes()).hexdigest())
+            self.assertEqual(len(result['members']),len(images))
+
+    async def test_oplus_zip_keeps_empty_categories_even_for_one_image(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'boot.img'; path.write_bytes(b'boot')
+            with Bundle(folder,'abcdef012345',layout='oplus') as bundle:
+                await bundle.add({'path':str(path),'name':path.name,'size':4,'sha256':hashlib.sha256(b'boot').hexdigest()})
+                result=await bundle.finish()
+            with zipfile.ZipFile(result['path']) as archive:
+                self.assertEqual(set(archive.namelist()), {'SYSTEM/','CRITICAL/','BOOTLOADER/','BOOTLOADER/boot.img'})
+
     async def test_archive_preserves_exact_images_and_removes_intermediate_files(self):
         images={'boot.img':b'Android boot image'*4096,'init_boot.img':b'init boot'*8192}
         with tempfile.TemporaryDirectory() as folder:

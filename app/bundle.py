@@ -6,10 +6,14 @@ from pathlib import Path
 from .payload import file_checksums
 from .security import SourceError
 from .threads import thread_call
+from .partition_layout import OPLUS_FOLDERS, oplus_folder
 
 
 class Bundle:
-    def __init__(self, directory, task_id):
+    def __init__(self, directory, task_id, layout=None):
+        if layout not in {None, 'oplus'}:
+            raise ValueError('Unknown partition archive layout')
+        self.layout = layout
         self.path = Path(directory) / ('payload-' + task_id + '.zip')
         self.partial = self.path.with_suffix('.zip.partial')
         self.archive = None
@@ -19,6 +23,9 @@ class Bundle:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.archive = zipfile.ZipFile(self.partial, 'w', compression=zipfile.ZIP_DEFLATED,
                                        compresslevel=1, allowZip64=True)
+        if self.layout == 'oplus':
+            for folder in OPLUS_FOLDERS:
+                self.archive.mkdir(folder + '/')
         return self
 
     async def add(self, image):
@@ -28,8 +35,9 @@ class Bundle:
         # Conservative bound: incompressible input can take its full size again in ZIP.
         if shutil.disk_usage(self.path.parent).free < image['size'] + 256*1024**2:
             raise SourceError('Runner không đủ chỗ tạo ZIP; chọn ít phân vùng hơn.')
-        await thread_call(self.archive.write, path, image['name'])
-        self.members.append({k:image[k] for k in ('name','size','sha256')})
+        archive_name = (oplus_folder(path.stem) + '/' if self.layout == 'oplus' else '') + image['name']
+        await thread_call(self.archive.write, path, archive_name)
+        self.members.append({**{k:image[k] for k in ('name','size','sha256')}, 'name':archive_name})
         path.unlink()
 
     async def finish(self):

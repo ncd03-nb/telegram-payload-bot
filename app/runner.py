@@ -16,6 +16,7 @@ from .security import SourceError
 from .settings import Settings
 from .telegram import Telegram
 from .bundle import Bundle
+from .partition_layout import dump_layout
 from .exchange import load_job_env, write_result
 
 
@@ -96,14 +97,16 @@ async def run():
                     progress.detail = f'Cache đã giải nén: {done/1024**2:.0f}/{end/1024**2:.0f} MiB cần đọc'
                 remote.prepare_progress = preparing
                 payload = await load_source(remote)
-                names = selection(os.environ['JOB_PARTITIONS'], payload.parts)
+                requested = os.environ['JOB_PARTITIONS']
+                names = selection(requested, payload.parts)
+                layout = dump_layout(requested, payload.parts, remote.rom_version or '', os.environ['JOB_SOURCE_URL'])
                 total = sum(payload.parts[n]['size'] for n in names)
                 if total > s.max_output:
                     raise SourceError('Tổng dung lượng ảnh vượt MAX_OUTPUT_GIB; chọn ít phân vùng hơn.')
                 completed = 0
-                multiple = len(names) > 1
+                multiple = len(names) > 1 or layout is not None
                 result['extraction_metrics'] = []
-                with Bundle(directory, task_id) if multiple else nullcontext() as bundle:
+                with Bundle(directory, task_id, layout=layout) if multiple else nullcontext() as bundle:
                     for name in names:
                         progress.name, progress.phase = name + '.img', ('Trích xuất và kiểm tra SHA-256' if getattr(payload,'trusted_hashes',True) else 'Trích xuất ảnh và tính SHA-256')
                         part_started = time.monotonic()
